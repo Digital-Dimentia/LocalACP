@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch } from 'vue';
-import { marked } from 'marked';
+import { renderMarkdown } from '../lib/markdown';
 import { useSessionStore } from '../stores/session';
 import { isMobile } from '../lib/platform';
 import ModePicker from './ModePicker.vue';
@@ -128,10 +128,6 @@ function toggleThought(messageId: string): void {
   } else {
     expandedThoughts.value.add(messageId);
   }
-}
-
-function renderMarkdown(content: string): string {
-  return marked.parse(content, { async: false }) as string;
 }
 
 function getToolIcon(kind: string): string {
