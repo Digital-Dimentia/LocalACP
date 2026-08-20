@@ -22,7 +22,9 @@ src-tauri/gen/apple
 
 # Rust
 *.rs.bk
-Cargo.lock
+# NOTE: Cargo.lock is intentionally committed. acp-ui is an application, not a
+# library — pinning the Rust dependency graph keeps it in step with the npm
+# lockfile, which tauri's build precheck compares against (see acpui-xjm).
 
 # Environment files (may contain secrets)
 .env
