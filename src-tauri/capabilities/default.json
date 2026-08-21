@@ -1,9 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window (desktop only — broad fs is required for ACP stdio agents that read/write files in the working directory)",
-  "windows": ["main"],
-  "platforms": ["macOS", "linux", "windows"],
+  "description": "Capability for the main window (desktop only). Read/write stay broad because ACP stdio agents legitimately touch any file under the working directory the user picks at runtime, which is not knowable at build time. The deny lists carve out credential stores and write targets that would turn a webview escape into code execution -- deny beats allow in Tauri's fs scope and paths are canonicalized first, so a symlink inside the cwd cannot reach them. See acpui-9va.5.",
+  "windows": [
+    "main"
+  ],
+  "platforms": [
+    "macOS",
+    "linux",
+    "windows"
+  ],
   "permissions": [
     "core:default",
     "opener:default",
@@ -11,19 +17,131 @@
     "dialog:default",
     {
       "identifier": "fs:allow-read-text-file",
-      "allow": [{ "path": "**" }]
+      "allow": [
+        {
+          "path": "**"
+        }
+      ],
+      "deny": [
+        {
+          "path": "$HOME/.ssh/**"
+        },
+        {
+          "path": "$HOME/.aws/**"
+        },
+        {
+          "path": "$HOME/.gnupg/**"
+        },
+        {
+          "path": "$HOME/.kube/**"
+        },
+        {
+          "path": "$HOME/.docker/config.json"
+        },
+        {
+          "path": "$HOME/.config/gh/**"
+        },
+        {
+          "path": "$HOME/.netrc"
+        },
+        {
+          "path": "$HOME/.npmrc"
+        },
+        {
+          "path": "$HOME/.pypirc"
+        },
+        {
+          "path": "$HOME/.git-credentials"
+        },
+        {
+          "path": "$HOME/Library/Keychains/**"
+        },
+        {
+          "path": "$CONFIG/acp-ui/**"
+        },
+        {
+          "path": "$APPCONFIG/**"
+        }
+      ]
     },
     {
       "identifier": "fs:allow-write-text-file",
-      "allow": [{ "path": "**" }]
-    },
-    {
-      "identifier": "fs:allow-exists",
-      "allow": [{ "path": "**" }]
-    },
-    {
-      "identifier": "fs:allow-mkdir",
-      "allow": [{ "path": "**" }]
+      "allow": [
+        {
+          "path": "**"
+        }
+      ],
+      "deny": [
+        {
+          "path": "$HOME/.ssh/**"
+        },
+        {
+          "path": "$HOME/.aws/**"
+        },
+        {
+          "path": "$HOME/.gnupg/**"
+        },
+        {
+          "path": "$HOME/.kube/**"
+        },
+        {
+          "path": "$HOME/.docker/config.json"
+        },
+        {
+          "path": "$HOME/.config/gh/**"
+        },
+        {
+          "path": "$HOME/.netrc"
+        },
+        {
+          "path": "$HOME/.npmrc"
+        },
+        {
+          "path": "$HOME/.pypirc"
+        },
+        {
+          "path": "$HOME/.git-credentials"
+        },
+        {
+          "path": "$HOME/Library/Keychains/**"
+        },
+        {
+          "path": "$CONFIG/acp-ui/**"
+        },
+        {
+          "path": "$APPCONFIG/**"
+        },
+        {
+          "path": "$HOME/.zshrc"
+        },
+        {
+          "path": "$HOME/.zshenv"
+        },
+        {
+          "path": "$HOME/.zprofile"
+        },
+        {
+          "path": "$HOME/.zlogin"
+        },
+        {
+          "path": "$HOME/.bashrc"
+        },
+        {
+          "path": "$HOME/.bash_profile"
+        },
+        {
+          "path": "$HOME/.profile"
+        },
+        {
+          "path": "$HOME/.config/fish/**"
+        },
+        {
+          "path": "**/.git/config"
+        },
+        {
+          "path": "**/.git/hooks/**"
+        }
+      ]
     }
   ]
 }
