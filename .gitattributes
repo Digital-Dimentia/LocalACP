@@ -1,0 +1,46 @@
+# Line endings. The repo was 97/110 CRLF with no .gitattributes and
+# core.autocrlf unset, so whether a file kept CRLF depended on which tool
+# last touched it. Any editor or script doing a naive text-mode
+# read-modify-write silently rewrote whole files, turning small edits into
+# whole-file diffs. See acpui-w1a.
+#
+# Normalise everything to LF in the repository AND in the working tree.
+# There are no .bat/.cmd/.ps1 files that need CRLF; if one is added, give it
+# an explicit `eol=crlf` rule below.
+* text=auto eol=lf
+
+# Explicit text, so a stray heuristic cannot demote them to binary.
+*.ts      text
+*.vue     text
+*.rs      text
+*.json    text
+*.md      text
+*.mdc     text
+*.html    text
+*.svg     text
+*.xml     text
+*.toml    text
+*.yml     text
+*.yaml    text
+*.lock    text
+
+# Binary: never touch these, and do not try to diff them as text.
+*.png     binary
+*.ico     binary
+*.icns    binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.webp    binary
+*.woff    binary
+*.woff2   binary
+*.ttf     binary
+*.otf     binary
+*.pdf     binary
+*.dmg     binary
+*.exe     binary
+
+# Generated lockfiles: keep them out of diff noise and out of merge
+# resolution by hand -- regenerate instead.
+package-lock.json   -diff linguist-generated
+src-tauri/Cargo.lock -diff linguist-generated
