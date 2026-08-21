@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useConfigStore } from '../stores/config';
-import { addAgent, removeAgent, updateAgent } from '../lib/host';
+import { addAgent, removeAgent, updateAgent, loadKvStore } from '../lib/host';
+import { setTelemetryEnabled, TELEMETRY_ENABLED_KEY } from '../lib/telemetry';
 import { getTransportKind, type AgentTransportKind } from '../lib/types';
 import { restrictedTransports } from '../lib/platform';
 import EnvVarEditor from './EnvVarEditor.vue';
@@ -202,6 +203,33 @@ async function handleDelete(name: string) {
     console.error('Failed to delete agent:', e);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Privacy / telemetry
+// ---------------------------------------------------------------------------
+
+// Mirrors the stored preference. Telemetry is opt-in, so the checkbox starts
+// unchecked for anyone who has never turned it on.
+const telemetryOn = ref(false);
+
+onMounted(async () => {
+  try {
+    const prefs = await loadKvStore('preferences.json');
+    telemetryOn.value = (await prefs.get<boolean>(TELEMETRY_ENABLED_KEY)) ?? false;
+  } catch (e) {
+    console.warn('Failed to read telemetry preference:', e);
+  }
+});
+
+async function handleTelemetryToggle(): Promise<void> {
+  // setTelemetryEnabled persists the choice and starts or tears down the SDK,
+  // so the change takes effect now rather than at next launch.
+  try {
+    await setTelemetryEnabled(telemetryOn.value);
+  } catch (e) {
+    console.error('Failed to update telemetry preference:', e);
+  }
+}
 </script>
 
 <template>
@@ -343,6 +371,26 @@ async function handleDelete(name: string) {
               No agents configured. Add one to get started!
             </div>
           </div>
+        </section>
+
+        <section class="config-section">
+          <h3>Privacy</h3>
+          <label class="telemetry-toggle">
+            <input
+              type="checkbox"
+              v-model="telemetryOn"
+              @change="handleTelemetryToggle"
+            />
+            <span>Send anonymous usage data</span>
+          </label>
+          <small>
+            Off by default. When on, ACP UI reports app launches, agent names,
+            and session events (created, resumed, prompt sent, disconnected)
+            plus error reports to Azure Application Insights, tagged with a
+            random install ID. Prompt text, agent output, and file contents are
+            never sent. Turning this off stops collection immediately; anything
+            already queued is sent as the reporter shuts down.
+          </small>
         </section>
 
         <section class="config-section">
@@ -648,6 +696,17 @@ async function handleDelete(name: string) {
   margin-bottom: 0.25rem;
 }
 
+.telemetry-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.telemetry-toggle input {
+  cursor: pointer;
+}
 .config-section small {
   font-size: 0.75rem;
   color: var(--text-muted);

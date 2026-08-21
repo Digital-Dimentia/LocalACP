@@ -380,6 +380,30 @@ npm run tauri ios dev
 
 iOS doesn't ship a binary today because it requires per-developer signing and an Apple Developer Program membership.
 
+## 🔒 Privacy
+
+ACP UI can report anonymous usage data to Azure Application Insights. **It is off by default and nothing is sent unless you turn it on.**
+
+Enable or disable it any time under **Settings → Privacy → "Send anonymous usage data"**. Turning it off takes effect immediately — the reporting SDK is torn down, not just muted, so no further events are collected. Anything already queued at that moment is flushed as the SDK shuts down.
+
+**What is sent when it is on**
+
+| | |
+|---|---|
+| App launch | a page-view event named `AppLaunch` |
+| Session events | `SessionCreated`, `SessionResumed`, `PromptSent`, `SessionDisconnected`, each with the agent name and whether it succeeded |
+| Errors | exception type, message, and stack trace |
+| Identifier | a random UUID generated on first use and stored in `preferences.json` |
+| Standard SDK fields | app version, OS, and browser/webview version |
+
+**What is never sent**
+
+Prompt text, agent responses, file contents, file paths, working directory names, environment variables, and agent URLs or authentication headers.
+
+**About the identifier**
+
+The identifier is a random install ID, not a hardware or machine ID. It is generated the first time telemetry runs and lives in the `telemetryInstallId` key of `preferences.json`. Deleting that file or reinstalling produces a new one, and it cannot be tied back to your machine. To reset it, turn telemetry off and delete the key.
+
 ## 🔗 Links
 
 - [Agent Client Protocol](https://agentclientprotocol.com/)
