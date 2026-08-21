@@ -318,6 +318,13 @@ npm run tauri dev
 npm run tauri build
 ```
 
+### Test fixtures
+
+`fixtures/` holds standalone mock agents for reproducing behaviour that is hard
+to trigger with a real agent — currently `mock-acp-agent.mjs`, which emits tool
+calls with no assistant message before them. See
+[fixtures/README.md](fixtures/README.md).
+
 ### Building / running the web app
 
 The web app uses the same Vue 3 frontend, with the Tauri runtime swapped out for browser-native APIs (WebSocket, `localStorage`). It only supports remote agents over `ws://` / `wss://`.
