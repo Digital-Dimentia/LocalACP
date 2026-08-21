@@ -1,0 +1,12 @@
+# Revisions to skip when running git blame, because they are mechanical
+# and would otherwise attribute every line in the repo to a formatting pass.
+#
+# Enable this file for your clone (git does not pick it up automatically):
+#
+#     git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub honours it automatically for blame views.
+
+# chore: normalise all line endings to LF [mechanical] -- acpui-w1a
+# 47 files, line terminators only, verified byte-identical under CRLF->LF.
+db308460a46610877999b2d1b32626ff9eb1b571
