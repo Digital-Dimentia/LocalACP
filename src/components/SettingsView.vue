@@ -294,7 +294,7 @@ async function handleTelemetryToggle(): Promise<void> {
               </div>
 
               <div class="form-group">
-                <EnvVarEditor v-model="formEnv" />
+                <EnvVarEditor v-model="formEnv" mask-values />
               </div>
             </template>
 
@@ -313,11 +313,21 @@ async function handleTelemetryToggle(): Promise<void> {
 
               <div class="form-group">
                 <label>Headers</label>
-                <EnvVarEditor v-model="formHeaders" />
+                <EnvVarEditor
+                  v-model="formHeaders"
+                  mask-values
+                  label="Headers"
+                  empty-text="No headers configured."
+                />
                 <small>
                   Authorization headers are sent over the connection. Browser WebSocket APIs
                   cannot attach arbitrary HTTP headers; an <code>Authorization: Bearer &lt;token&gt;</code>
                   header is forwarded as a <code>bearer.&lt;token&gt;</code> WebSocket subprotocol.
+                  <strong>That subprotocol travels in <code>Sec-WebSocket-Protocol</code>, which
+                  proxies and tunnels log far more often than they log
+                  <code>Authorization</code></strong> &mdash; avoid pointing a tokened agent at a
+                  tunnel whose access logs you do not control. Tokens are stored unencrypted in
+                  the agents config file, so treat that file as a secret.
                 </small>
               </div>
             </template>

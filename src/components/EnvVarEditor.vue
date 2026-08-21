@@ -6,15 +6,43 @@ interface EnvVar {
   value: string;
 }
 
-const props = defineProps<{
-  modelValue: Record<string, string>;
-}>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: Record<string, string>;
+    /** Render values as password fields with a per-row reveal toggle. Used for
+     * request headers, which routinely carry bearer tokens. */
+    maskValues?: boolean;
+    /** Heading text. This editor is reused for headers, so it cannot hardcode
+     * "Environment Variables". */
+    label?: string;
+    /** Empty-state text, for the same reason. */
+    emptyText?: string;
+  }>(),
+  {
+    maskValues: false,
+    label: 'Environment Variables',
+    emptyText: 'No environment variables configured.',
+  }
+);
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: Record<string, string>): void;
 }>();
 
 const envVars = ref<EnvVar[]>([]);
+
+// Which rows the user has chosen to reveal. Indexed alongside `envVars`, and
+// reset whenever the list is reloaded so a value never stays visible across
+// switching to a different agent.
+const revealed = ref<boolean[]>([]);
+
+function isHidden(index: number): boolean {
+  return props.maskValues && !revealed.value[index];
+}
+
+function toggleReveal(index: number): void {
+  revealed.value[index] = !revealed.value[index];
+}
 
 // Convert Record to array for editing
 watch(
@@ -24,6 +52,7 @@ watch(
       key,
       value,
     }));
+    revealed.value = envVars.value.map(() => false);
   },
   { immediate: true }
 );
@@ -41,10 +70,14 @@ function emitUpdate() {
 
 function addEnvVar() {
   envVars.value.push({ key: '', value: '' });
+  // A row the user is typing into is revealed; masking a field mid-entry
+  // makes it impossible to check what you typed.
+  revealed.value.push(true);
 }
 
 function removeEnvVar(index: number) {
   envVars.value.splice(index, 1);
+  revealed.value.splice(index, 1);
   emitUpdate();
 }
 
@@ -66,7 +99,7 @@ const hasEnvVars = computed(() => envVars.value.length > 0);
 <template>
   <div class="env-var-editor">
     <div class="env-header">
-      <span class="env-label">Environment Variables</span>
+      <span class="env-label">{{ props.label }}</span>
       <button type="button" class="add-env-btn" @click="addEnvVar">
         + Add
       </button>
@@ -83,12 +116,24 @@ const hasEnvVars = computed(() => envVars.value.length > 0);
         />
         <span class="env-equals">=</span>
         <input
-          type="text"
+          :type="isHidden(index) ? 'password' : 'text'"
           class="env-value"
           placeholder="value"
+          autocomplete="off"
+          spellcheck="false"
           :value="env.value"
           @input="onValueChange(index, $event)"
         />
+        <button
+          v-if="props.maskValues"
+          type="button"
+          class="reveal-env-btn"
+          :title="isHidden(index) ? 'Show value' : 'Hide value'"
+          :aria-label="isHidden(index) ? 'Show value' : 'Hide value'"
+          @click="toggleReveal(index)"
+        >
+          {{ isHidden(index) ? '👁' : '🙈' }}
+        </button>
         <button
           type="button"
           class="remove-env-btn"
@@ -101,7 +146,7 @@ const hasEnvVars = computed(() => envVars.value.length > 0);
     </div>
 
     <div v-else class="env-empty">
-      No environment variables configured.
+      {{ props.emptyText }}
     </div>
   </div>
 </template>
@@ -174,6 +219,15 @@ const hasEnvVars = computed(() => envVars.value.length > 0);
   color: var(--text-primary);
   font-family: monospace;
   font-size: 0.875rem;
+}
+
+.reveal-env-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 .remove-env-btn {

@@ -185,6 +185,23 @@ For agents running on another machine — or for connecting from a phone to an a
 
 Both `ws://` (cleartext, for LAN / Dev Tunnels) and `wss://` (TLS) are accepted. `Authorization: Bearer <token>` is propagated as a WebSocket subprotocol because browser/WebView WebSocket APIs cannot set custom HTTP headers.
 
+> **⚠️ How your bearer token is handled**
+>
+> **In transit.** Browser and WebView WebSocket APIs cannot set arbitrary HTTP headers, so an `Authorization: Bearer <token>` header is folded into the handshake's `Sec-WebSocket-Protocol` list as `bearer.<token>`. The practical consequence: **`Sec-WebSocket-Protocol` is logged by reverse proxies and tunnels far more routinely than `Authorization` is.** nginx records it as `$http_sec_websocket_protocol`, and cloud load balancers, Dev Tunnels, and ngrok-style services commonly capture it in access logs. `Authorization` is usually redacted by default; this header is not. Do not point a tokened agent at a tunnel whose access logs you do not control, and prefer `wss://` so the handshake is at least encrypted on the wire.
+>
+> **At rest.** Tokens are stored **unencrypted**, alongside the rest of the agent config:
+>
+> | Platform | Location |
+> |---|---|
+> | macOS | `~/Library/Application Support/acp-ui/agents.json` |
+> | Linux | `~/.config/acp-ui/agents.json` |
+> | Windows | `%APPDATA%\acp-ui\agents.json` |
+> | Web build | `localStorage`, key `acp-ui:agents` |
+>
+> The file has default permissions and no OS keychain is used, so treat it as a secret: anything that can read your home directory can read your tokens. On the web build, any script running in the page's origin can read them.
+>
+> In the app, header and environment-variable values are masked in Settings behind a per-row reveal toggle. Tokens are not recorded by the Traffic Monitor, which logs only ACP JSON-RPC messages and never the WebSocket handshake.
+
 > **Note**: Filesystem RPCs (`fs/read_text_file`, `fs/write_text_file`) are only available on Tauri desktop (Windows, macOS, Linux). On mobile and web clients the capabilities are advertised as `false` and any incoming `fs/*` request from the agent is rejected with JSON-RPC `-32601 Method not found`. For remote agents the working directory path is interpreted on the **agent's host**, not on the client device.
 
 ## 🌐 Connecting from your phone or browser
