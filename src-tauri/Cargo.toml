@@ -1,6 +1,6 @@
 [package]
 name = "acp-ui"
-version = "v0.2.0"
+version = "0.1.16"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
