@@ -130,6 +130,36 @@ export const useSessionStore = defineStore('session', () => {
     error.value = `Connection lost: ${reason ?? 'transport closed'}`;
   }
 
+  // Returns the assistant message the current turn is building, creating one if
+  // the turn has not opened with an assistant chunk yet. Every renderable part of
+  // an assistant turn (text, thought, tool calls) hangs off this container.
+  function currentAssistantMessage(): ChatMessage {
+    const last = messages.value[messages.value.length - 1];
+    if (last && last.role === 'assistant') {
+      return last;
+    }
+    const created: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+      toolCalls: [],
+    };
+    messages.value.push(created);
+    return messages.value[messages.value.length - 1];
+  }
+
+  // Registers a tool call on the current assistant message and in the lookup map.
+  // Both hold the same object so later updates need no write-through.
+  function attachToolCall(toolCall: ToolCallInfo): void {
+    const msg = currentAssistantMessage();
+    if (!msg.toolCalls) {
+      msg.toolCalls = [];
+    }
+    msg.toolCalls.push(toolCall);
+    toolCalls.value.set(toolCall.toolCallId, msg.toolCalls[msg.toolCalls.length - 1]);
+  }
+
   // Session update handler
   function handleSessionUpdate(notification: SessionNotification) {
     const update = notification.update;
@@ -152,60 +182,27 @@ export const useSessionStore = defineStore('session', () => {
         }
         break;
 
-      case 'agent_message_chunk':
-        // Append to last assistant message or create new
-        const lastMsg = messages.value[messages.value.length - 1];
-        if (lastMsg && lastMsg.role === 'assistant') {
-          if (update.content.type === 'text') {
-            lastMsg.content += update.content.text;
-          }
-        } else {
-          messages.value.push({
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content: update.content.type === 'text' ? update.content.text : '',
-            timestamp: Date.now(),
-            toolCalls: [],
-          });
+      case 'agent_message_chunk': {
+        const msg = currentAssistantMessage();
+        if (update.content.type === 'text') {
+          msg.content += update.content.text;
         }
         break;
+      }
 
-      case 'agent_thought_chunk':
-        // Append to last assistant message's thought field or create new
-        const lastAssistantMsg = messages.value[messages.value.length - 1];
-        if (lastAssistantMsg && lastAssistantMsg.role === 'assistant') {
-          if (update.content.type === 'text') {
-            lastAssistantMsg.thought = (lastAssistantMsg.thought || '') + update.content.text;
-          }
-        } else {
-          messages.value.push({
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content: '',
-            thought: update.content.type === 'text' ? update.content.text : '',
-            timestamp: Date.now(),
-            toolCalls: [],
-          });
+      case 'agent_thought_chunk': {
+        const msg = currentAssistantMessage();
+        if (update.content.type === 'text') {
+          msg.thought = (msg.thought || '') + update.content.text;
         }
         break;
+      }
 
-      case 'tool_call':
-        // Add tool call to the current assistant message
-        const currentAssistantMsg = messages.value[messages.value.length - 1];
-        if (currentAssistantMsg && currentAssistantMsg.role === 'assistant') {
-          if (!currentAssistantMsg.toolCalls) {
-            currentAssistantMsg.toolCalls = [];
-          }
-          currentAssistantMsg.toolCalls.push({
-            toolCallId: update.toolCallId,
-            title: update.title,
-            kind: update.kind || 'other',
-            status: update.status || 'pending',
-            locations: update.locations,
-          });
-        }
-        // Also keep in global map for updates
-        toolCalls.value.set(update.toolCallId, {
+      case 'tool_call': {
+        // A tool call is a valid update on its own and may arrive before any
+        // assistant chunk, so the container is created on demand rather than
+        // required to already exist.
+        attachToolCall({
           toolCallId: update.toolCallId,
           title: update.title,
           kind: update.kind || 'other',
@@ -213,24 +210,30 @@ export const useSessionStore = defineStore('session', () => {
           locations: update.locations,
         });
         break;
+      }
 
-      case 'tool_call_update':
+      case 'tool_call_update': {
         const existing = toolCalls.value.get(update.toolCallId);
-        if (existing) {
-          if (update.status) existing.status = update.status;
-          if (update.title) existing.title = update.title;
-          // Also update in the message's toolCalls array
-          for (const msg of messages.value) {
-            if (msg.toolCalls) {
-              const tc = msg.toolCalls.find(t => t.toolCallId === update.toolCallId);
-              if (tc) {
-                if (update.status) tc.status = update.status;
-                if (update.title) tc.title = update.title;
-              }
-            }
-          }
+        if (!existing) {
+          // The tool_call that opened this entry may never have arrived (an agent
+          // that only reports terminal state, or a mid-stream reconnect). Create
+          // it from the update rather than dropping the call.
+          attachToolCall({
+            toolCallId: update.toolCallId,
+            title: update.title || update.toolCallId,
+            kind: update.kind || 'other',
+            status: update.status || 'pending',
+            locations: update.locations ?? undefined,
+          });
+          break;
         }
+        // The message array holds this same object, so one mutation updates both.
+        if (update.status) existing.status = update.status;
+        if (update.title) existing.title = update.title;
+        if (update.kind) existing.kind = update.kind;
+        if (update.locations) existing.locations = update.locations;
         break;
+      }
 
       case 'current_mode_update':
         // Agent changed the mode
