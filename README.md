@@ -310,6 +310,9 @@ npm install
 
 # Run in development mode (Tauri desktop)
 npm run tauri dev
+
+# ...or the equivalent shorthand, runnable from any directory
+./startup
 ```
 
 ### Build for Production

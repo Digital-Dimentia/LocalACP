@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Launch the acp-ui desktop app from this working tree, so you can see the code
+# as it currently stands running in a real window.
+#
+#   ./startup            # dev build with HMR (Vue reloads on save; Rust changes rebuild)
+#   ./startup --release  # any extra arguments are passed through to `tauri dev`
+#
+# To launch it wired up to the issue-9 mock agent instead, use
+# ./scripts/start-mock.sh (or `npm run start:mock`).
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+command -v npm >/dev/null || { echo "error: npm is required (see README Prerequisites)" >&2; exit 1; }
+
+if [ ! -d node_modules ]; then
+  echo "node_modules missing — installing dependencies first."
+  npm install
+fi
+
+if [ $# -gt 0 ]; then
+  exec npm run tauri dev -- "$@"
+fi
+exec npm run tauri dev
