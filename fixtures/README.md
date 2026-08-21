@@ -36,7 +36,10 @@ all indicate a regression in `handleSessionUpdate` in `src/stores/session.ts`.
 
 ### Desktop (stdio)
 
-Add it to your agent config — `~/.config/acp-ui/agents.json` on Linux,
+`npm run start:mock` registers the agent for you and starts the dev build; add
+`-- --setup` to only write the config. It merges into whatever agents you
+already have and backs the file up first. To do it by hand instead, add it to
+your agent config — `~/.config/acp-ui/agents.json` on Linux,
 `~/Library/Application Support/acp-ui/agents.json` on macOS,
 `%APPDATA%\acp-ui\agents.json` on Windows — using an absolute path:
 
@@ -61,7 +64,7 @@ is not an app dependency, so install it transiently:
 
 ```sh
 npm i --no-save ws
-node fixtures/mock-acp-agent.mjs --ws 8791
+npm run start:mock -- --ws 8791   # or: node fixtures/mock-acp-agent.mjs --ws 8791
 ```
 
 Then `npm run dev:web`, add a WebSocket agent pointing at

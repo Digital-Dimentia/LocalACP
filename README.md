@@ -322,8 +322,15 @@ npm run tauri build
 
 `fixtures/` holds standalone mock agents for reproducing behaviour that is hard
 to trigger with a real agent — currently `mock-acp-agent.mjs`, which emits tool
-calls with no assistant message before them. See
-[fixtures/README.md](fixtures/README.md).
+calls with no assistant message before them.
+
+```sh
+# Register the mock agent in agents.json and start the desktop build.
+npm run start:mock
+```
+
+See [fixtures/README.md](fixtures/README.md) for the sequence it emits and what
+correct rendering looks like.
 
 ### Building / running the web app
 

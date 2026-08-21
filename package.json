@@ -10,7 +10,8 @@
     "build:web": "vue-tsc --noEmit && vite build --mode web",
     "preview:web": "vite preview --mode web --outDir dist-web",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "start:mock": "bash scripts/start-mock.sh"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.13.1",
