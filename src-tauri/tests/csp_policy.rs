@@ -55,6 +55,21 @@ fn parse(raw: &str) -> HashMap<String, Vec<String>> {
     out
 }
 
+/// Directives with nothing legitimate to permit. Each is a way out of the
+/// document -- a plugin, a nested browsing context, a worker, a form POST --
+/// and the app uses none of them, so each is closed outright rather than
+/// scoped to `'self'`.
+///
+/// `worker-src` earns its place here on evidence: nothing in `src/` and
+/// nothing in the built bundle calls `new Worker`, `SharedWorker`,
+/// `navigator.serviceWorker` or `createObjectURL`, so no worker is ever
+/// constructed and no `blob:` URL ever exists to construct one from. The
+/// test below keeps that true for first-party code. Note that on WebKit a
+/// `worker-src` it did not recognise would fall back through `child-src` to
+/// `script-src 'self'`, so the `blob:` escape closes either way.
+const CLOSED_DIRECTIVES: [&str; 5] =
+    ["object-src", "frame-src", "frame-ancestors", "form-action", "worker-src"];
+
 fn sources<'a>(p: &'a HashMap<String, Vec<String>>, directive: &str) -> &'a [String] {
     p.get(directive)
         .unwrap_or_else(|| panic!("policy is missing the `{directive}` directive"))
@@ -89,13 +104,13 @@ fn production_policy_locks_down_script_execution() {
 #[test]
 fn production_policy_closes_the_structural_directives() {
     let p = policy("csp");
-    for directive in ["object-src", "frame-src", "frame-ancestors", "form-action"] {
+    for directive in CLOSED_DIRECTIVES {
         assert_eq!(
             sources(&p, directive),
             ["'none'"],
             "`{directive}` has no legitimate use here; leaving it open gives \
-             injected markup a way out (plugin, nested browsing context, or a \
-             POST of whatever it can read)"
+             injected markup a way out (plugin, nested browsing context, a \
+             worker, or a POST of whatever it can read)"
         );
     }
     assert_eq!(
@@ -161,7 +176,7 @@ fn dev_policy_relaxes_only_what_hmr_needs() {
         "devCsp duplicating csp means one of them is wrong: either dev cannot \
          run HMR, or production is as loose as dev"
     );
-    for directive in ["object-src", "frame-src", "frame-ancestors", "form-action"] {
+    for directive in CLOSED_DIRECTIVES {
         assert_eq!(
             sources(&dev, directive),
             ["'none'"],
@@ -201,4 +216,50 @@ fn telemetry_origins() -> Vec<String> {
          connection string, parsed: {origins:?}"
     );
     origins
+}
+
+/// `worker-src 'none'` is only correct while nothing wants a worker. A worker
+/// added later fails here rather than at runtime, where it would surface as a
+/// feature that silently does nothing -- and the fix is a deliberate widening
+/// of the policy, not a scramble to make a console error go away.
+///
+/// First-party code only. Dependencies are checked by inventorying the built
+/// bundle, which this test cannot do because `dist/` is not committed.
+#[test]
+fn no_first_party_code_wants_a_worker() {
+    fn scan(dir: &PathBuf, hits: &mut Vec<String>) {
+        for entry in fs::read_dir(dir).expect("src/ is readable").flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                scan(&path, hits);
+                continue;
+            }
+            let is_source = path
+                .extension()
+                .is_some_and(|e| e == "ts" || e == "vue" || e == "js");
+            if !is_source {
+                continue;
+            }
+            let text = fs::read_to_string(&path).unwrap_or_default();
+            for needle in [
+                "new Worker",
+                "new SharedWorker",
+                "navigator.serviceWorker",
+                "createObjectURL",
+            ] {
+                if text.contains(needle) {
+                    hits.push(format!("{}: {needle}", path.display()));
+                }
+            }
+        }
+    }
+
+    let mut hits = Vec::new();
+    scan(&repo_root().join("src"), &mut hits);
+    assert!(
+        hits.is_empty(),
+        "`worker-src` is 'none' and `blob:` was dropped from it on the grounds \
+         that nothing constructs a worker or a blob URL. That is no longer \
+         true: {hits:?}. Widen the policy on purpose, or drop the usage."
+    );
 }
