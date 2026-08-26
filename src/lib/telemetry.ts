@@ -74,6 +74,17 @@ async function startSdk(): Promise<void> {
       disableAjaxTracking: true,      // Reduce noise
       autoTrackPageVisitTime: false,  // Not applicable for desktop
       enableCorsCorrelation: false,   // Not needed
+      extensionConfig: {
+        // The SDK ships a config-sync plugin that, left at its defaults,
+        // fetches https://js.monitor.azure.com/scripts/b/ai.config.1.cfg.json
+        // on init and lets the response re-configure the running SDK. That is
+        // a remote control channel we neither want nor use, and the webview
+        // CSP blocks the origin anyway, so leaving it on would only produce a
+        // guaranteed console violation the first time a user opts in.
+        // `blkCdnCfg` is the SDK's own switch for turning the fetch off at
+        // the source rather than relying on the policy to catch it.
+        AppInsightsCfgSyncPlugin: { blkCdnCfg: true },
+      },
     }
   });
 
