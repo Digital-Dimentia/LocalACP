@@ -10,10 +10,10 @@ import { AcpClientBridge, createAcpClient } from '../lib/acp-bridge';
 import { onAgentStderr, spawnAgent, killAgent } from '../lib/host';
 import { isDesktop } from '../lib/platform';
 import { useConfigStore } from './config';
+import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk';
 import type { SessionNotification, AuthMethod } from '@agentclientprotocol/sdk';
 
 const STORE_PATH = 'sessions.json';
-const PROTOCOL_VERSION = 1;
 
 // App version (loaded once at startup)
 let appVersion = '0.1.0';
