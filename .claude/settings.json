@@ -1,4 +1,7 @@
 {
+  "env": {
+    "BEADS_ACTOR": "dave"
+  },
   "permissions": {
     "allow": [
       "Edit(.claude/skills/**)"
