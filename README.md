@@ -364,18 +364,20 @@ decode falls back to the name as text.
 
 ### Application icon
 
-The dock / Applications-folder / taskbar / installer icon is generated from a
-separate vector master, `assets/brand/localacp-app-icon.svg`:
+Every branded asset is derived from one piece of source artwork,
+`assets/local-acp-2.png`, by a single script:
 
 ```bash
-./scripts/generate-icons.sh
+./scripts/generate-brand.sh
 ```
 
-That rewrites every size under `src-tauri/icons` (macOS `.icns`, Windows `.ico`,
-Linux PNGs, and the Android/iOS launcher sets). The outputs are committed, so a
-normal `tauri build` never needs ImageMagick — only re-running the script does.
-The app icon is the mark alone rather than the full lockup, because a logotype
-is unreadable at the 16-32px sizes the icon is mostly seen at.
+That cuts the circular badge and the logotype out of the lockup, recovers their
+transparency, and rewrites every size under `src-tauri/icons` (macOS `.icns`,
+Windows `.ico`, Linux PNGs, and the Android/iOS launcher sets). All outputs are
+committed, so a normal `tauri build` never needs ImageMagick — only re-running
+the script does. The app icon is the badge alone rather than the full lockup,
+because a logotype is unreadable at the 16-32px sizes an icon is mostly seen
+at.
 
 `icon` must be a path **inside the repo**, and is inlined into the bundle as a
 `data:` URI. Remote URLs are rejected: an icon fetched from an origin at runtime
