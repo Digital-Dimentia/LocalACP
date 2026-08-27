@@ -7,6 +7,8 @@ interface ImportMetaEnv {
   readonly VITE_BRAND_NAME: string;
   /** White-label brand icon as a `data:` URI, or `""` for none. */
   readonly VITE_BRAND_ICON: string;
+  /** White-label logotype as a `data:` URI, or `""` to render the name as text. */
+  readonly VITE_BRAND_WORDMARK: string;
 }
 
 interface ImportMeta {

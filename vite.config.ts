@@ -50,18 +50,23 @@ interface Branding {
   name: string;
   /** `data:` URI for the brand icon, or `""` when branding sets no icon. */
   icon: string;
+  /**
+   * `data:` URI for a styled logotype rendered in place of the name text, or
+   * `""` to render the name as text.
+   */
+  wordmark: string;
 }
 
-/** Read and inline the icon named by a repo-relative path. */
-function inlineIcon(iconPath: string): string {
+/** Read and inline the image named by a repo-relative path. */
+function inlineImage(field: string, iconPath: string): string {
   // Any URI scheme is rejected outright. `https:` would be an outbound
   // beacon on every launch and a hole in the image CSP; `file:` and `data:`
   // would just be confusing ways to spell the two supported cases.
   if (/^[a-z][a-z0-9+.-]*:/i.test(iconPath)) {
     throw new Error(
-      `branding icon "${iconPath}" is a URI. The icon must be a path relative ` +
-        `to the repo root so it can be inlined into the bundle; remote icons ` +
-        `are not supported.`
+      `branding ${field} "${iconPath}" is a URI. It must be a path relative to ` +
+        `the repo root so it can be inlined into the bundle; remote images are ` +
+        `not supported.`
     );
   }
 
@@ -69,15 +74,15 @@ function inlineIcon(iconPath: string): string {
   const inside = relative(repoRoot, absolute);
   if (inside.startsWith("..") || inside.startsWith(sep)) {
     throw new Error(
-      `branding icon "${iconPath}" resolves outside the repo (${absolute}). ` +
-        `Copy the icon into the repo and point at it from there.`
+      `branding ${field} "${iconPath}" resolves outside the repo (${absolute}). ` +
+        `Copy the image into the repo and point at it from there.`
     );
   }
 
   const mime = ICON_MIME_TYPES[extname(absolute).toLowerCase()];
   if (!mime) {
     throw new Error(
-      `branding icon "${iconPath}" has an unsupported extension. ` +
+      `branding ${field} "${iconPath}" has an unsupported extension. ` +
         `Supported: ${Object.keys(ICON_MIME_TYPES).join(", ")}.`
     );
   }
@@ -87,12 +92,12 @@ function inlineIcon(iconPath: string): string {
     bytes = readFileSync(absolute);
   } catch (e) {
     throw new Error(
-      `branding icon "${iconPath}" could not be read (${absolute}): ` +
+      `branding ${field} "${iconPath}" could not be read (${absolute}): ` +
         `${e instanceof Error ? e.message : String(e)}`
     );
   }
   if (bytes.length === 0) {
-    throw new Error(`branding icon "${iconPath}" is empty (${absolute}).`);
+    throw new Error(`branding ${field} "${iconPath}" is empty (${absolute}).`);
   }
 
   return `data:${mime};base64,${bytes.toString("base64")}`;
@@ -102,7 +107,7 @@ function loadBranding(): Branding {
   // @ts-expect-error process is a nodejs global
   const env = process.env as Record<string, string | undefined>;
 
-  let file: { name?: unknown; icon?: unknown } = {};
+  let file: { name?: unknown; icon?: unknown; wordmark?: unknown } = {};
   try {
     file = JSON.parse(
       readFileSync(fileURLToPath(new URL("./branding.json", import.meta.url)), "utf-8")
@@ -134,14 +139,24 @@ function loadBranding(): Branding {
     );
   }
 
-  // An explicitly empty icon means "name only", which is a legitimate choice.
-  const rawIcon = env.ACP_UI_BRAND_ICON ?? file.icon ?? "";
-  if (typeof rawIcon !== "string") {
-    throw new Error(`branding icon must be a string path, got ${typeof rawIcon}.`);
-  }
-  const iconPath = rawIcon.trim();
+  const inlineField = (field: string, raw: unknown): string => {
+    if (typeof raw !== "string") {
+      throw new Error(`branding ${field} must be a string path, got ${typeof raw}.`);
+    }
+    const path = raw.trim();
+    return path ? inlineImage(field, path) : "";
+  };
 
-  return { name, icon: iconPath ? inlineIcon(iconPath) : "" };
+  // An explicitly empty icon or wordmark is a legitimate choice: no icon, and
+  // the name rendered as text respectively.
+  return {
+    name,
+    icon: inlineField("icon", env.ACP_UI_BRAND_ICON ?? file.icon ?? ""),
+    wordmark: inlineField(
+      "wordmark",
+      env.ACP_UI_BRAND_WORDMARK ?? file.wordmark ?? ""
+    ),
+  };
 }
 
 const branding = loadBranding();
@@ -182,10 +197,11 @@ export default defineConfig(async ({ mode }) => {
       // host abstraction (`src/lib/host/index.ts`) reads this on the web
       // build and falls back to it when `@tauri-apps/api/app` is unavailable.
       "import.meta.env.VITE_APP_VERSION": JSON.stringify(pkg.version),
-      // White-label branding, read by `src/lib/branding.ts`. The icon is a
-      // `data:` URI inlined at build time -- see `loadBranding()` above.
+      // White-label branding, read by `src/lib/branding.ts`. The icon and
+      // wordmark are `data:` URIs inlined at build time -- see `loadBranding()`.
       "import.meta.env.VITE_BRAND_NAME": JSON.stringify(branding.name),
       "import.meta.env.VITE_BRAND_ICON": JSON.stringify(branding.icon),
+      "import.meta.env.VITE_BRAND_WORDMARK": JSON.stringify(branding.wordmark),
     },
 
     // Web builds emit to `dist-web/` so the Tauri build pipeline (which

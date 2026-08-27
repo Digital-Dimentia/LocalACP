@@ -27,6 +27,17 @@ export const brandName: string =
 export const brandIcon: string = import.meta.env.VITE_BRAND_ICON || '';
 
 /**
+ * `data:` URI for a styled logotype drawn in place of the name text, or `''`
+ * to render `brandName` as text.
+ *
+ * The name is still the accessible label (it becomes the image's `alt`) and
+ * still drives the window title and welcome pane, so a wordmark never removes
+ * the product name from anywhere it is read rather than seen.
+ */
+export const brandWordmark: string =
+  import.meta.env.VITE_BRAND_WORDMARK || '';
+
+/**
  * Apply the brand name to the window/tab title.
  *
  * `index.html` is already rewritten at build time, so the title is correct

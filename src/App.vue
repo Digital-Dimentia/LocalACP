@@ -12,15 +12,17 @@ import SettingsView from './components/SettingsView.vue';
 import AuthMethodDialog from './components/AuthMethodDialog.vue';
 import TrafficMonitor from './components/TrafficMonitor.vue';
 import StartupProgress from './components/StartupProgress.vue';
-import { brandName, brandIcon, applyBrandTitle } from './lib/branding';
+import { brandName, brandIcon, brandWordmark, applyBrandTitle } from './lib/branding';
 import type { SavedSession } from './lib/types';
 
 const configStore = useConfigStore();
 const sessionStore = useSessionStore();
 
-// Cleared if the inlined brand icon fails to decode, so a corrupt icon shows
-// the name alone rather than a broken-image glyph in the header.
+// Cleared if an inlined brand image fails to decode, so a corrupt asset falls
+// back to the plain name rather than leaving a broken-image glyph in the
+// header. The wordmark falls back to the name as text.
 const brandIconOk = ref(true);
+const brandWordmarkOk = ref(true);
 
 const selectedAgent = ref('');
 const selectedCwd = ref('');
@@ -293,7 +295,17 @@ function clearError() {
             decoding="async"
             @error="brandIconOk = false"
           />
-          <h1 :title="brandName">{{ brandName }}</h1>
+          <h1 :title="brandName">
+            <img
+              v-if="brandWordmark && brandWordmarkOk"
+              class="brand-wordmark"
+              :src="brandWordmark"
+              :alt="brandName"
+              decoding="async"
+              @error="brandWordmarkOk = false"
+            />
+            <template v-else>{{ brandName }}</template>
+          </h1>
         </div>
         <div class="header-actions">
           <button 
@@ -603,6 +615,25 @@ html, body, #app {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A logotype rendered in place of the name text. Drawn at a fixed 20px tall
+   inside the header's 30px line box -- filling the row edge to edge would
+   leave the lockup no breathing room against the buttons opposite.
+
+   Fixed height with `width: auto` is the contract, so artwork supplied at 2x
+   (40px tall) renders sharp on retina instead of being letterboxed down. The
+   h1 above already clamps the width; `object-fit: contain` means hitting that
+   clamp shrinks the logotype proportionally rather than squashing it. */
+.brand-wordmark {
+  display: block;
+  height: 20px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: left center;
+  -webkit-user-drag: none;
+  user-select: none;
 }
 
 .header-actions {

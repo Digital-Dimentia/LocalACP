@@ -331,7 +331,8 @@ repo root and baked into the bundle at build time:
 ```json
 {
   "name": "Acme Agent Console",
-  "icon": "src-tauri/icons/acme-logo.svg"
+  "icon": "assets/brand/acme-mark.svg",
+  "wordmark": "assets/brand/acme-wordmark.png"
 }
 ```
 
@@ -339,7 +340,7 @@ Then rebuild (`npm run tauri build`). Both fields can also be overridden per
 build without editing the file, which is the convenient form for CI:
 
 ```bash
-ACP_UI_BRAND_NAME="Acme Agent Console" ACP_UI_BRAND_ICON="assets/acme.svg" npm run tauri build
+ACP_UI_BRAND_NAME="Acme Agent Console" ACP_UI_BRAND_ICON="assets/brand/acme-mark.svg" npm run tauri build
 ```
 
 The name replaces "ACP UI" in the sidebar header, the welcome pane, the browser
@@ -348,6 +349,33 @@ at 24x24 CSS pixels; supply it at 48x48 or larger, or as an SVG, so it stays
 sharp on high-DPI displays. Set `"icon": ""` for a name-only header. Any source
 size or aspect ratio is safe — the icon is letterboxed into its 24x24 box and
 cannot change the header's height or layout.
+
+`wordmark` is optional and takes a styled logotype that is drawn **in place of**
+the name text in the header. It is rendered 20px tall with the width left to
+follow the aspect ratio, so supply it at 40px tall for a sharp result on
+high-DPI displays. The `name` is still what the wordmark's `alt` text says, and
+still what the window title and welcome pane use, so the product name is never
+lost anywhere it is read rather than seen. Omit the field to render the name as
+plain text.
+
+Both images fall back gracefully at runtime: an icon that fails to decode leaves
+the name alone rather than a broken-image glyph, and a wordmark that fails to
+decode falls back to the name as text.
+
+### Application icon
+
+The dock / Applications-folder / taskbar / installer icon is generated from a
+separate vector master, `assets/brand/localacp-app-icon.svg`:
+
+```bash
+./scripts/generate-icons.sh
+```
+
+That rewrites every size under `src-tauri/icons` (macOS `.icns`, Windows `.ico`,
+Linux PNGs, and the Android/iOS launcher sets). The outputs are committed, so a
+normal `tauri build` never needs ImageMagick — only re-running the script does.
+The app icon is the mark alone rather than the full lockup, because a logotype
+is unreadable at the 16-32px sizes the icon is mostly seen at.
 
 `icon` must be a path **inside the repo**, and is inlined into the bundle as a
 `data:` URI. Remote URLs are rejected: an icon fetched from an origin at runtime

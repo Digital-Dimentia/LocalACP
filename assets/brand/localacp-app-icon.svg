@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="LocalACP">
+  <!-- Source of truth for the application icon (dock, Applications folder,
+       taskbar, installers). Generated into src-tauri/icons via
+       `scripts/generate-icons.sh`.
+
+       The mark alone rather than the full "LocalACP" lockup: the wordmark in
+       assets/local-acp.png is 19px tall and would be unreadable at the 16-32px
+       sizes this icon is mostly seen at, quite apart from being too small to
+       upscale cleanly. -->
+  <defs>
+    <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6C155D"/>
+      <stop offset="0.25" stop-color="#AD2357"/>
+      <stop offset="0.5" stop-color="#E62F50"/>
+      <stop offset="0.75" stop-color="#FF5A4C"/>
+      <stop offset="1" stop-color="#FF7F4B"/>
+    </linearGradient>
+  </defs>
+  <!-- Same navy the source artwork sits on. Rounded rather than a hard square
+       so it reads as an app icon on macOS and Windows alike. -->
+  <rect width="1024" height="1024" rx="205" fill="#03001E"/>
+  <!-- Mark at 20x19 user units, scaled 26x and centred: 520x494 on a 1024
+       canvas, i.e. just over half the width, which keeps the bars legible at
+       32px without crowding the corner radius. -->
+  <g transform="translate(252, 265) scale(26)" fill="url(#bar)">
+    <rect x="0"  y="10" width="4" height="9"  rx="0.9"/>
+    <rect x="5"  y="0"  width="4" height="19" rx="0.9"/>
+    <rect x="10" y="2"  width="4" height="9"  rx="0.9"/>
+    <rect x="10" y="13" width="4" height="6"  rx="0.9"/>
+    <rect x="15" y="8"  width="4" height="11" rx="0.9"/>
+  </g>
+</svg>

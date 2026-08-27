@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 19" role="img" aria-label="LocalACP">
+  <!-- Redrawn as vector from assets/local-acp.png, whose lockup is only 20x19
+       pixels: four equalizer bars, the third split into two segments, each
+       element carrying its own vertical purple-to-orange gradient. Bar
+       positions, heights and the split were measured from that bitmap; the
+       gradient stops were sampled down the tallest bar. Vector rather than an
+       upscale so the mark stays sharp from a 24px sidebar icon to a 1024px
+       dock icon. -->
+  <defs>
+    <!-- objectBoundingBox units: every bar restarts the ramp over its own
+         height, which is what the source does. -->
+    <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6C155D"/>
+      <stop offset="0.25" stop-color="#AD2357"/>
+      <stop offset="0.5" stop-color="#E62F50"/>
+      <stop offset="0.75" stop-color="#FF5A4C"/>
+      <stop offset="1" stop-color="#FF7F4B"/>
+    </linearGradient>
+  </defs>
+  <g fill="url(#bar)">
+    <rect x="0"  y="10" width="4" height="9"  rx="0.9"/>
+    <rect x="5"  y="0"  width="4" height="19" rx="0.9"/>
+    <rect x="10" y="2"  width="4" height="9"  rx="0.9"/>
+    <rect x="10" y="13" width="4" height="6"  rx="0.9"/>
+    <rect x="15" y="8"  width="4" height="11" rx="0.9"/>
+  </g>
+</svg>

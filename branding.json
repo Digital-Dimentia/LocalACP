@@ -1,5 +1,6 @@
 {
-  "$comment": "White-label branding, applied at build time. Edit and rebuild to rebrand. Both fields can be overridden per-build with the ACP_UI_BRAND_NAME / ACP_UI_BRAND_ICON environment variables. `icon` is a path relative to this repo root and must stay inside it: it is inlined into the bundle as a data URI, so remote URLs are rejected by design (see README, White-label branding).",
-  "name": "ACP UI",
-  "icon": "src-tauri/icons/icon-source.svg"
+  "$comment": "White-label branding, applied at build time. Edit and rebuild to rebrand. Fields can be overridden per-build with ACP_UI_BRAND_NAME / ACP_UI_BRAND_ICON / ACP_UI_BRAND_WORDMARK. Paths are relative to this repo root and must stay inside it: they are inlined into the bundle as data URIs, so remote URLs are rejected by design (see README, White-label branding).",
+  "name": "LocalACP",
+  "icon": "assets/brand/localacp-mark.svg",
+  "wordmark": "assets/brand/localacp-wordmark.png"
 }
