@@ -3,6 +3,11 @@ import { ref, computed, onMounted } from 'vue';
 import { useConfigStore } from '../stores/config';
 import { addAgent, removeAgent, updateAgent, loadKvStore } from '../lib/host';
 import { setTelemetryEnabled, TELEMETRY_ENABLED_KEY } from '../lib/telemetry';
+import {
+  loadThemePreference,
+  setThemePreference,
+  type ThemePreference,
+} from '../lib/theme';
 import { getTransportKind, type AgentTransportKind } from '../lib/types';
 import { restrictedTransports } from '../lib/platform';
 import EnvVarEditor from './EnvVarEditor.vue';
@@ -205,6 +210,27 @@ async function handleDelete(name: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Appearance
+// ---------------------------------------------------------------------------
+
+// Read synchronously: unlike the telemetry preference this one lives in
+// localStorage precisely so it can be applied before first paint, so there is
+// nothing to await here (see src/lib/theme.ts).
+const theme = ref<ThemePreference>(loadThemePreference());
+
+const THEME_OPTIONS: ReadonlyArray<{ value: ThemePreference; label: string }> = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
+
+function handleThemeChange(): void {
+  // Applies to the live document and persists in one step, so the change is
+  // visible behind the Settings dialog immediately.
+  setThemePreference(theme.value);
+}
+
+// ---------------------------------------------------------------------------
 // Privacy / telemetry
 // ---------------------------------------------------------------------------
 
@@ -381,6 +407,30 @@ async function handleTelemetryToggle(): Promise<void> {
               No agents configured. Add one to get started!
             </div>
           </div>
+        </section>
+
+        <section class="config-section">
+          <h3>Appearance</h3>
+          <div class="theme-options" role="radiogroup" aria-label="Theme">
+            <label
+              v-for="option in THEME_OPTIONS"
+              :key="option.value"
+              class="theme-option"
+            >
+              <input
+                type="radio"
+                name="theme"
+                :value="option.value"
+                v-model="theme"
+                @change="handleThemeChange"
+              />
+              <span>{{ option.label }}</span>
+            </label>
+          </div>
+          <small>
+            System follows your operating system's appearance setting. Light
+            and Dark override it for this app only, on this device.
+          </small>
         </section>
 
         <section class="config-section">
@@ -704,6 +754,23 @@ async function handleTelemetryToggle(): Promise<void> {
   border-radius: 4px;
   word-break: break-all;
   margin-bottom: 0.25rem;
+}
+
+.theme-options {
+  display: flex;
+  gap: 1rem;
+  margin: 0.25rem 0 0.5rem;
+  flex-wrap: wrap;
+}
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.theme-option input {
+  cursor: pointer;
 }
 
 .telemetry-toggle {

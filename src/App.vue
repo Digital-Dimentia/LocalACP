@@ -525,8 +525,18 @@ function clearError() {
   background-color: #ffffff;
 }
 
+/* Dark palette. Duplicated across two selectors on purpose:
+
+     - under `prefers-color-scheme`, excluded when the user has explicitly
+       pinned light, so "system" keeps following the OS;
+     - under `[data-theme="dark"]`, so an explicit dark choice wins on a
+       light OS.
+
+   The light palette above stays the bare `:root` base, which is what makes
+   "light on a dark OS" work. A single `[data-theme="dark"]` rule would only
+   get you dark-on-light. `src/lib/theme.ts` sets the attribute. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg-primary: #4da6ff;
     --bg-primary-hover: #3399ff;
     --bg-sidebar: #1e1e1e;
@@ -541,6 +551,22 @@ function clearError() {
     --border-color: #404040;
     background-color: #252525;
   }
+}
+
+:root[data-theme="dark"] {
+  --bg-primary: #4da6ff;
+  --bg-primary-hover: #3399ff;
+  --bg-sidebar: #1e1e1e;
+  --bg-main: #252525;
+  --bg-hover: #333;
+  --bg-user: #1a3a5c;
+  --bg-assistant: #2d2d2d;
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0a0;
+  --text-muted: #707070;
+  --text-accent: #4da6ff;
+  --border-color: #404040;
+  background-color: #252525;
 }
 
 * {
@@ -898,12 +924,21 @@ html, body, #app {
   to { transform: rotate(360deg); }
 }
 
+/* Paired selectors so the Settings toggle reaches these too: the media
+   query drives "system", the attribute rule drives an explicit choice.
+   See the dark palette in App.vue and src/lib/theme.ts. */
 @media (prefers-color-scheme: dark) {
-  .reconnect-banner {
+  :root:not([data-theme="light"]) .reconnect-banner {
     background: #082f49;
     color: #7dd3fc;
     border-bottom-color: #0c4a6e;
   }
+}
+
+:root[data-theme="dark"] .reconnect-banner {
+  background: #082f49;
+  color: #7dd3fc;
+  border-bottom-color: #0c4a6e;
 }
 
 .welcome-screen {

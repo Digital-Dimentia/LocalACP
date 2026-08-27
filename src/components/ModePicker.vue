@@ -152,10 +152,17 @@ if (typeof window !== 'undefined') {
   overflow: hidden;
 }
 
+/* Paired selectors so the Settings toggle reaches these too: the media
+   query drives "system", the attribute rule drives an explicit choice.
+   See the dark palette in App.vue and src/lib/theme.ts. */
 @media (prefers-color-scheme: dark) {
-  .dropdown-menu {
+  :root:not([data-theme="light"]) .dropdown-menu {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
+}
+
+:root[data-theme="dark"] .dropdown-menu {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 /* On phones the menu's anchored width (`min-width: 240px`) can overflow

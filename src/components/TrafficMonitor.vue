@@ -416,19 +416,35 @@ function handleCopy(entry: TrafficEntry) {
   color: #dc3545;
 }
 
+/* Paired selectors so the Settings toggle reaches these too: the media
+   query drives "system", the attribute rule drives an explicit choice.
+   See the dark palette in App.vue and src/lib/theme.ts. */
 @media (prefers-color-scheme: dark) {
-  .entry.out .direction-icon {
+  :root:not([data-theme="light"]) .entry.out .direction-icon {
     color: #4da6ff;
   }
   
-  .entry.in .direction-icon {
+  :root:not([data-theme="light"]) .entry.in .direction-icon {
     color: #5cb85c;
   }
   
-  .entry.error .direction-icon,
-  .entry.error .method {
+  :root:not([data-theme="light"]) .entry.error .direction-icon,
+  :root:not([data-theme="light"]) .entry.error .method {
     color: #ff6b6b;
   }
+}
+
+:root[data-theme="dark"] .entry.out .direction-icon {
+  color: #4da6ff;
+}
+
+:root[data-theme="dark"] .entry.in .direction-icon {
+  color: #5cb85c;
+}
+
+:root[data-theme="dark"] .entry.error .direction-icon,
+:root[data-theme="dark"] .entry.error .method {
+  color: #ff6b6b;
 }
 
 .method {
