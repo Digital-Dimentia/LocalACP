@@ -12,10 +12,15 @@ import SettingsView from './components/SettingsView.vue';
 import AuthMethodDialog from './components/AuthMethodDialog.vue';
 import TrafficMonitor from './components/TrafficMonitor.vue';
 import StartupProgress from './components/StartupProgress.vue';
+import { brandName, brandIcon, applyBrandTitle } from './lib/branding';
 import type { SavedSession } from './lib/types';
 
 const configStore = useConfigStore();
 const sessionStore = useSessionStore();
+
+// Cleared if the inlined brand icon fails to decode, so a corrupt icon shows
+// the name alone rather than a broken-image glyph in the header.
+const brandIconOk = ref(true);
 
 const selectedAgent = ref('');
 const selectedCwd = ref('');
@@ -101,6 +106,12 @@ const pendingAuthMethods = computed(() => sessionStore.pendingAuthMethods);
 const pendingAuthAgentName = computed(() => sessionStore.pendingAuthAgentName);
 
 onMounted(async () => {
+  // Native Tauri window titles come from `tauri.conf.json` and ignore
+  // `document.title`, so a rebranded build has to set it explicitly. Not
+  // awaited: nothing below depends on the title, and it must never delay
+  // startup.
+  void applyBrandTitle();
+
   // Track viewport width so the sidebar can default-collapse into a drawer
   // on phones / narrow windows. We watch a MediaQueryList rather than
   // resize for correctness across orientation changes on iOS.
@@ -271,7 +282,19 @@ function clearError() {
       :class="{ 'is-drawer': isNarrowLayout }"
     >
       <div class="sidebar-header">
-        <h1>ACP UI</h1>
+        <div class="brand">
+          <img
+            v-if="brandIcon && brandIconOk"
+            class="brand-icon"
+            :src="brandIcon"
+            alt=""
+            width="24"
+            height="24"
+            decoding="async"
+            @error="brandIconOk = false"
+          />
+          <h1 :title="brandName">{{ brandName }}</h1>
+        </div>
         <div class="header-actions">
           <button 
             class="settings-btn" 
@@ -424,7 +447,7 @@ function clearError() {
         
         <!-- Welcome screen when not connected -->
         <div v-else class="welcome-screen">
-          <h2>Welcome to ACP UI</h2>
+          <h2>Welcome to {{ brandName }}</h2>
           <p>Select an agent and create a new session to get started.</p>
           <p v-if="!hasAgents" class="hint">
             Configure agents in your config file to begin.
@@ -543,14 +566,52 @@ html, body, #app {
   border-bottom: 1px solid var(--border-color);
 }
 
+/* Brand icon + product name, as one unit at the left of the header.
+   `min-width: 0` lets the name ellipse instead of forcing the row wider than
+   the sidebar and pushing .header-actions off the edge. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+/* The 24px box is deliberate and load-bearing. The h1 below is 1.25rem, whose
+   line box is ~24-25px, and that line box is what sets the header height. An
+   icon at 24px therefore fits inside the height the header already had, so
+   adding branding reflows nothing.
+
+   Both dimensions are pinned here rather than left to the image's intrinsic
+   size, and `object-fit: contain` letterboxes the result: a white-label icon
+   delivered at 512x512, or a non-square one, still occupies exactly 24x24 and
+   cannot stretch the row. */
+.brand-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  object-fit: contain;
+  /* Nothing about the icon is information the name does not already carry, so
+     it stays out of the accessibility tree (alt="") and out of drag gestures. */
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
 .sidebar-header h1 {
   font-size: 1.25rem;
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .header-actions {
   display: flex;
   gap: 0.25rem;
+  /* Pinned at full width: a long brand name ellipses, it never squeezes the
+     buttons. In the narrow layout these are 40x40 tap targets and become the
+     header's height driver, which the 24px icon stays clear of. */
+  flex-shrink: 0;
 }
 
 .settings-btn,

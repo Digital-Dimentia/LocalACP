@@ -63,6 +63,7 @@ Then open the app normally. Alternatives if you'd rather not use the terminal:
 - **Environment Variables** — Configure per-agent environment variables (API keys, settings)
 - **Traffic Monitor** — Debug and inspect ACP protocol messages in real-time
 - **Hot-Reload Config** — Edit agent configurations without restarting (desktop)
+- **White-Label Branding** — Ship the app under your own name and icon (see [White-label branding](#white-label-branding))
 - **Cross-Platform** — Web (any modern browser), Windows, macOS (ARM/Intel), Linux (x64/ARM64), Android, iOS
 
 ## 🎯 Default Agents
@@ -321,6 +322,44 @@ npm run tauri dev
 ```bash
 npm run tauri build
 ```
+
+### White-label branding
+
+The product name and the icon beside it are read from `branding.json` at the
+repo root and baked into the bundle at build time:
+
+```json
+{
+  "name": "Acme Agent Console",
+  "icon": "src-tauri/icons/acme-logo.svg"
+}
+```
+
+Then rebuild (`npm run tauri build`). Both fields can also be overridden per
+build without editing the file, which is the convenient form for CI:
+
+```bash
+ACP_UI_BRAND_NAME="Acme Agent Console" ACP_UI_BRAND_ICON="assets/acme.svg" npm run tauri build
+```
+
+The name replaces "ACP UI" in the sidebar header, the welcome pane, the browser
+tab and the native window title. The icon renders immediately left of the name
+at 24x24 CSS pixels; supply it at 48x48 or larger, or as an SVG, so it stays
+sharp on high-DPI displays. Set `"icon": ""` for a name-only header. Any source
+size or aspect ratio is safe — the icon is letterboxed into its 24x24 box and
+cannot change the header's height or layout.
+
+`icon` must be a path **inside the repo**, and is inlined into the bundle as a
+`data:` URI. Remote URLs are rejected: an icon fetched from an origin at runtime
+would phone home on every launch and would need the webview
+[CSP](#-privacy) widened to permit it. Anything the build cannot resolve — a
+missing file, a path escaping the repo, an unsupported extension, an empty or
+overlong name — fails the build rather than silently shipping unbranded.
+
+A full rebrand also means updating `productName`, `identifier`, the window
+`title` and the `bundle.icon` list in `src-tauri/tauri.conf.json`; those drive
+the installer name, the application bundle and the dock/taskbar icon, and are
+build-time settings Tauri does not read from `branding.json`.
 
 ### Test fixtures
 
