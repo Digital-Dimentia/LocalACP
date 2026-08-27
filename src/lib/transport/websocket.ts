@@ -17,24 +17,20 @@
 //   the agent side (sessions are per-connection in most ACP implementations).
 //   We instead surface the close to the session store, which can present a
 //   clear "reconnect" affordance to the user.
+// - Keep-alive is the WebSocket layer's job, not ours. We used to send a
+//   JSON-RPC `$/ping` notification every 25 s to hold idle NAT / reverse-proxy
+//   mappings open, which was wrong twice over: `$/` is an LSP namespace
+//   convention rather than an ACP one (`$/ping` is in no ACP schema, and ACP
+//   spells extensions with a leading underscore), so agents route it to
+//   unknown-method handling and log an error per heartbeat; and RFC 6455
+//   already defines keep-alive as the ping/pong control frame, which a browser
+//   WebSocket answers automatically. Browser JS cannot originate a ping frame
+//   at all, so a deployment that drops idle connections is fixed server-side
+//   (`ping_interval` on Python `websockets`, `proxy_read_timeout` on nginx),
+//   never with a synthetic application frame.
 import { TransportListeners, type AcpTransport, type Unsubscribe } from './types';
 
 const ACP_SUBPROTOCOL = 'acp.v1';
-
-/**
- * Default heartbeat interval (ms). Many home NATs evict idle UDP/TCP
- * mappings around 60 s, devtunnel/free-tier reverse proxies typically use
- * ~60 s, and nginx defaults `proxy_read_timeout` to 60 s. We send a
- * JSON-RPC notification every 25 s so a tick always lands inside the
- * shortest common window even with a dropped one. Set to 0 to disable.
- */
-const DEFAULT_HEARTBEAT_MS = 25_000;
-
-/** Method name for the heartbeat ping. The `$/`-prefixed namespace follows
- * the LSP/JSON-RPC convention for implementation-defined notifications: a
- * conforming server that doesn't recognise the method MUST silently ignore
- * it (JSON-RPC 2.0 §4.1, "The Server MUST NOT reply to a Notification"). */
-const HEARTBEAT_METHOD = '$/ping';
 
 /** Options accepted by `WebSocketTransport.connect`. */
 export interface WebSocketTransportOptions {
@@ -53,12 +49,6 @@ export interface WebSocketTransportOptions {
    */
   connectTimeoutMs?: number;
   /**
-   * Application-level heartbeat interval in milliseconds. Sends a `$/ping`
-   * JSON-RPC notification on this cadence to keep idle NAT/proxy mappings
-   * warm. Defaults to {@link DEFAULT_HEARTBEAT_MS}; set to `0` to disable.
-   */
-  heartbeatMs?: number;
-  /**
    * Inject a constructor for testability. Defaults to the global
    * `WebSocket`. Tests pass a fake constructor here.
    */
@@ -70,10 +60,8 @@ export class WebSocketTransport implements AcpTransport {
   private readonly closeListeners = new TransportListeners<string | undefined>();
   private ws: WebSocket | null = null;
   private closed = false;
-  /** Periodic heartbeat timer (see {@link DEFAULT_HEARTBEAT_MS}). */
-  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
-  private constructor(ws: WebSocket, heartbeatMs: number) {
+  private constructor(ws: WebSocket) {
     this.ws = ws;
     ws.addEventListener('message', (ev) => this.handleMessage(ev));
     ws.addEventListener('close', (ev) =>
@@ -83,9 +71,6 @@ export class WebSocketTransport implements AcpTransport {
       // The `close` event always fires after `error`, so we forward only
       // there to avoid double-emitting close to listeners.
     });
-    if (heartbeatMs > 0) {
-      this.startHeartbeat(heartbeatMs);
-    }
   }
 
   /**
@@ -146,7 +131,7 @@ export class WebSocketTransport implements AcpTransport {
       });
     });
 
-    return new WebSocketTransport(ws, opts.heartbeatMs ?? DEFAULT_HEARTBEAT_MS);
+    return new WebSocketTransport(ws);
   }
 
   private handleMessage(ev: MessageEvent): void {
@@ -176,44 +161,10 @@ export class WebSocketTransport implements AcpTransport {
   private handleClose(reason: string): void {
     if (this.closed) return;
     this.closed = true;
-    this.stopHeartbeat();
     this.closeListeners.emit(reason);
     this.messageListeners.clear();
     this.closeListeners.clear();
     this.ws = null;
-  }
-
-  /**
-   * Send a JSON-RPC `$/ping` notification on a fixed interval to keep the
-   * connection alive across NAT / reverse-proxy idle timeouts. The frame is
-   * sent below the bridge layer so it never appears in the Traffic Monitor.
-   *
-   * Heartbeats are notifications (no `id`) so a conforming agent never
-   * replies; agents that don't recognise `$/ping` MUST silently ignore it
-   * per JSON-RPC 2.0. We tolerate a transient send error (e.g. a race with
-   * the server's own close) by stopping the timer rather than surfacing it.
-   */
-  private startHeartbeat(intervalMs: number): void {
-    const frame = `{"jsonrpc":"2.0","method":"${HEARTBEAT_METHOD}"}\n`;
-    this.heartbeatTimer = setInterval(() => {
-      if (this.closed || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-        this.stopHeartbeat();
-        return;
-      }
-      try {
-        this.ws.send(frame);
-      } catch (e) {
-        console.warn('WebSocketTransport heartbeat send failed:', e);
-        this.stopHeartbeat();
-      }
-    }, intervalMs);
-  }
-
-  private stopHeartbeat(): void {
-    if (this.heartbeatTimer !== null) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-    }
   }
 
   async send(json: string): Promise<void> {
@@ -244,7 +195,6 @@ export class WebSocketTransport implements AcpTransport {
 
   async close(): Promise<void> {
     if (this.closed) return;
-    this.stopHeartbeat();
     if (this.ws) {
       try {
         this.ws.close(1000, 'client closed');

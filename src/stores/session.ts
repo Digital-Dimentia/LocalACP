@@ -10,10 +10,40 @@ import { AcpClientBridge, createAcpClient } from '../lib/acp-bridge';
 import { onAgentStderr, spawnAgent, killAgent } from '../lib/host';
 import { isDesktop } from '../lib/platform';
 import { useConfigStore } from './config';
+import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk';
 import type { SessionNotification, AuthMethod } from '@agentclientprotocol/sdk';
 
 const STORE_PATH = 'sessions.json';
-const PROTOCOL_VERSION = 1;
+
+/**
+ * Enforce the version the agent negotiated in its `initialize` reply.
+ *
+ * ACP lets the agent answer with a different version than the client asked
+ * for — the client's version if it's supported, otherwise the newest the
+ * agent speaks — and requires the client to disconnect when it can't speak
+ * the result. acp-ui implements exactly {@link PROTOCOL_VERSION}, so any
+ * other number is an incompatibility.
+ *
+ * Failing here, at the handshake, is the whole point: without this the
+ * mismatch surfaces later as an arbitrary unsupported method and an error
+ * that never names the real cause. A non-conforming agent that omits the
+ * field is warned about rather than rejected — it isn't evidence of a
+ * mismatch, and rejecting would break agents that work today.
+ */
+function assertNegotiatedProtocolVersion(negotiated: number | undefined, agentName: string): void {
+  if (negotiated === undefined) {
+    console.warn(
+      `Agent '${agentName}' omitted protocolVersion from its initialize response; assuming ACP v${PROTOCOL_VERSION}.`
+    );
+    return;
+  }
+  if (negotiated !== PROTOCOL_VERSION) {
+    throw new Error(
+      `Agent '${agentName}' negotiated ACP protocol v${negotiated}, but acp-ui speaks v${PROTOCOL_VERSION}. ` +
+        `Update acp-ui if the agent is newer, or the agent if it is older.`
+    );
+  }
+}
 
 // App version (loaded once at startup)
 let appVersion = '0.1.0';
@@ -420,6 +450,8 @@ export const useSessionStore = defineStore('session', () => {
 
       console.log('Agent initialized:', initResponse);
 
+      assertNegotiatedProtocolVersion(initResponse.protocolVersion, agentName);
+
       // Check if agent supports session loading
       const supportsLoadSession = initResponse.agentCapabilities?.loadSession ?? false;
 
@@ -621,6 +653,8 @@ export const useSessionStore = defineStore('session', () => {
           version: appVersion,
         },
       });
+
+      assertNegotiatedProtocolVersion(initResponse.protocolVersion, savedSession.agentName);
 
       // Store available auth methods for potential retry
       const availableAuthMethods = initResponse.authMethods || [];

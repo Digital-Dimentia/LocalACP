@@ -51,7 +51,6 @@ Then open the app normally. Alternatives if you'd rather not use the terminal:
 - **Web app** — Run in any modern browser at [acp-ui.github.io](https://acp-ui.github.io/) without installing anything
 - **Mobile** — Android APK shipped on Releases; iOS via local Xcode build
 - **Foreground reconnect** — On mobile and the web, automatically reattaches to your session when the app/tab regains focus
-- **Idle keep-alive** — Sends a JSON-RPC `$/ping` heartbeat every 25 seconds so NAT/proxy idle timeouts don't drop your WebSocket
 - **Session Management** — Create, resume, and manage conversation sessions
 - **Rich Chat Interface** — Markdown rendering, syntax highlighting, tool call visualization
 - **Slash Commands** — Quick access to agent capabilities with `/command` syntax
