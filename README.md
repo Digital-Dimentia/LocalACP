@@ -6,7 +6,9 @@
 
 A modern, cross-platform client for the [Agent Client Protocol (ACP)](https://agentclientprotocol.com/) on desktop, mobile, and the web. Connect to AI coding agents like GitHub Copilot, Claude Code, Gemini CLI, Qwen Code, Codex CLI, OpenCode, OpenClaw, Kiro CLI, Hermes Agent, and any ACP-compatible agent from a unified interface.
 
-![ACP UI Screenshot](assets/screenshot.png)
+![ACP UI on Windows, light theme](assets/screenshot.png)
+
+![ACP UI on macOS, dark theme](assets/screenshot-macos-dark.png)
 
 ## 🌍 Try it in your browser
 
