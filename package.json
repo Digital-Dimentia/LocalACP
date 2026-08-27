@@ -11,7 +11,9 @@
     "preview:web": "vite preview --mode web --outDir dist-web",
     "preview": "vite preview",
     "tauri": "tauri",
-    "start:mock": "bash scripts/start-mock.sh"
+    "start:mock": "bash scripts/start-mock.sh",
+    "brand:apply": "node scripts/apply-branding.mjs",
+    "brand:check": "node scripts/apply-branding.mjs --check"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.13.1",

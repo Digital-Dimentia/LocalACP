@@ -14,6 +14,15 @@ edition = "2021"
 name = "acp_ui_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+# Named explicitly rather than defaulting to the package name, because macOS
+# shows this filename as the application name -- in the Dock and in the
+# "About X" / "Hide X" / "Quit X" menu items -- whenever the app runs unbundled,
+# which is every `tauri dev` session. Kept in step with `branding.json` by
+# `scripts/apply-branding.mjs`; do not edit by hand.
+[[bin]]
+name = "LocalACP"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

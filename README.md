@@ -336,15 +336,25 @@ repo root and baked into the bundle at build time:
 }
 ```
 
-Then rebuild (`npm run tauri build`). Both fields can also be overridden per
-build without editing the file, which is the convenient form for CI:
+Then apply the name to the native side and rebuild:
 
 ```bash
-ACP_UI_BRAND_NAME="Acme Agent Console" ACP_UI_BRAND_ICON="assets/brand/acme-mark.svg" npm run tauri build
+npm run brand:apply    # writes the name into src-tauri/ -- commit what it changes
+npm run tauri build
+```
+
+All three fields can also be overridden per build without editing the file,
+which is the convenient form for CI:
+
+```bash
+export ACP_UI_BRAND_NAME="Acme Agent Console"
+export ACP_UI_BRAND_ICON="assets/brand/acme-mark.svg"
+npm run brand:apply && npm run tauri build
 ```
 
 The name replaces "ACP UI" in the sidebar header, the welcome pane, the browser
-tab and the native window title. The icon renders immediately left of the name
+tab, the native window title, the macOS Dock label and the `About` / `Hide` /
+`Quit` items in the application menu. The icon renders immediately left of the name
 at 24x24 CSS pixels; supply it at 48x48 or larger, or as an SVG, so it stays
 sharp on high-DPI displays. Set `"icon": ""` for a name-only header. Any source
 size or aspect ratio is safe — the icon is letterboxed into its 24x24 box and
@@ -386,10 +396,38 @@ would phone home on every launch and would need the webview
 missing file, a path escaping the repo, an unsupported extension, an empty or
 overlong name — fails the build rather than silently shipping unbranded.
 
-A full rebrand also means updating `productName`, `identifier`, the window
-`title` and the `bundle.icon` list in `src-tauri/tauri.conf.json`; those drive
-the installer name, the application bundle and the dock/taskbar icon, and are
-build-time settings Tauri does not read from `branding.json`.
+#### The native-side name
+
+Vite bakes the name into the JavaScript bundle, but it cannot reach the two
+files that decide what the *operating system* calls the app: the Tauri CLI has
+already read `src-tauri/tauri.conf.json` by the time it runs the frontend
+build, and the binary's name comes from `src-tauri/Cargo.toml`. `npm run
+brand:apply` writes both from `branding.json`, and their outputs are committed
+the same way the generated icons are:
+
+| Written | Why it matters |
+|---------|----------------|
+| `tauri.conf.json` → `productName` | `CFBundleName` in the macOS `.app`, and the installer name elsewhere |
+| `tauri.conf.json` → window `title` | the title the window is *created* with, before the frontend boots and sets it |
+| `tauri.conf.json` → `mainBinaryName` | tells `tauri build` which cargo output to bundle |
+| `Cargo.toml` → `[[bin]] name` | the executable filename |
+
+macOS takes the Dock hover label and the `About X` / `Hide X` / `Quit X` menu
+items from `NSRunningApplication.localizedName`, which is `CFBundleName` for a
+bundled app but falls back to the bare executable filename for an unbundled
+one — which is every `npm run tauri dev` session. That is why the binary is
+named after the brand rather than after the crate. A cargo target name may only
+contain letters, digits, `-` and `_`, so anything else in the name becomes a
+hyphen there (`Acme Agent Console` → `Acme-Agent-Console`); only the dev-mode
+label is affected, since a bundled build uses `CFBundleName` verbatim.
+
+Forgetting the step cannot ship: `vite.config.ts` compares the two files
+against `branding.json` on every non-web build and fails with the command to
+run. `npm run brand:check` is the same comparison on its own, for CI.
+
+A full rebrand also means updating `identifier` and the `bundle.icon` list in
+`src-tauri/tauri.conf.json` by hand; those drive the bundle identity and the
+dock/taskbar icon, and are not derived from `branding.json`.
 
 ### Test fixtures
 

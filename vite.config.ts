@@ -3,6 +3,7 @@ import vue from "@vitejs/plugin-vue";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { extname, relative, resolve, sep } from "node:path";
+import { binaryName, brandName, readBrandingFile } from "./scripts/branding-name.mjs";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
@@ -31,11 +32,6 @@ const pkg = JSON.parse(
 // Every failure below throws rather than falling back. A white-labeller who
 // typos an icon path should get a failed build, not a silently unbranded one.
 // ---------------------------------------------------------------------------
-
-const DEFAULT_BRAND_NAME = "ACP UI";
-
-/** Longest name the sidebar header renders without ellipsing. */
-const MAX_BRAND_NAME_LENGTH = 64;
 
 const ICON_MIME_TYPES: Record<string, string> = {
   ".svg": "image/svg+xml",
@@ -107,37 +103,12 @@ function loadBranding(): Branding {
   // @ts-expect-error process is a nodejs global
   const env = process.env as Record<string, string | undefined>;
 
-  let file: { name?: unknown; icon?: unknown; wordmark?: unknown } = {};
-  try {
-    file = JSON.parse(
-      readFileSync(fileURLToPath(new URL("./branding.json", import.meta.url)), "utf-8")
-    );
-  } catch (e) {
-    // A missing branding.json is fine -- the defaults below stand in. A
-    // malformed one is not: it means someone tried to rebrand and failed.
-    const code = (e as NodeJS.ErrnoException).code;
-    if (code !== "ENOENT") {
-      throw new Error(
-        `branding.json is unreadable or not valid JSON: ` +
-          `${e instanceof Error ? e.message : String(e)}`
-      );
-    }
-  }
-
-  const rawName = env.ACP_UI_BRAND_NAME ?? file.name ?? DEFAULT_BRAND_NAME;
-  if (typeof rawName !== "string") {
-    throw new Error(`branding name must be a string, got ${typeof rawName}.`);
-  }
-  const name = rawName.trim();
-  if (!name) {
-    throw new Error(`branding name is empty. Remove it to keep the default.`);
-  }
-  if (name.length > MAX_BRAND_NAME_LENGTH) {
-    throw new Error(
-      `branding name is ${name.length} characters; the sidebar header ellipses ` +
-        `anything past roughly ${MAX_BRAND_NAME_LENGTH}. Pick a shorter name.`
-    );
-  }
+  // The name is resolved by `scripts/branding-name.mjs` rather than here,
+  // because `scripts/apply-branding.mjs` needs the identical answer when it
+  // writes the name into `tauri.conf.json` and `Cargo.toml` -- files this
+  // config is read too late to influence. See `assertNativeBrandingApplied()`.
+  const file = readBrandingFile();
+  const name = brandName(file);
 
   const inlineField = (field: string, raw: unknown): string => {
     if (typeof raw !== "string") {
@@ -160,6 +131,59 @@ function loadBranding(): Branding {
 }
 
 const branding = loadBranding();
+
+/**
+ * Fail the build when the native side is still on the previous brand.
+ *
+ * The macOS Dock label and the "About X" / "Hide X" / "Quit X" menu items come
+ * from `NSRunningApplication.localizedName` -- CFBundleName once bundled, the
+ * bare executable filename under `tauri dev`. Neither is reachable from Vite:
+ * the Tauri CLI has already read `tauri.conf.json` by the time it runs
+ * `beforeBuildCommand`, and the binary name lives in `Cargo.toml`. So they are
+ * written ahead of time by `npm run brand:apply` and committed, and checked
+ * here so a rebrand that forgets that step fails loudly instead of shipping an
+ * app whose menu bar still says "acp-ui".
+ *
+ * Web builds skip the check: nothing native is involved.
+ */
+function assertNativeBrandingApplied(brand: Branding): void {
+  const read = (relativePath: string) =>
+    readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf-8");
+
+  const config = JSON.parse(read("./src-tauri/tauri.conf.json")) as {
+    productName?: string;
+    mainBinaryName?: string;
+    app?: { windows?: { title?: string }[] };
+  };
+  const bin = binaryName(brand.name);
+
+  const stale: string[] = [];
+  if (config.productName !== brand.name) {
+    stale.push(`tauri.conf.json productName is "${config.productName}"`);
+  }
+  if (config.mainBinaryName !== bin) {
+    stale.push(`tauri.conf.json mainBinaryName is "${config.mainBinaryName}"`);
+  }
+  for (const [i, w] of (config.app?.windows ?? []).entries()) {
+    if (w.title !== brand.name) {
+      stale.push(`tauri.conf.json window ${i} title is "${w.title}"`);
+    }
+  }
+  const cargoBin = /\[\[bin\]\][^[]*?\bname\s*=\s*"([^"]*)"/.exec(
+    read("./src-tauri/Cargo.toml")
+  );
+  if (cargoBin?.[1] !== bin) {
+    stale.push(`Cargo.toml [[bin]] name is ${cargoBin ? `"${cargoBin[1]}"` : "absent"}`);
+  }
+
+  if (stale.length) {
+    throw new Error(
+      `Branding name is "${brand.name}" but the native config has not been ` +
+        `updated to match: ${stale.join("; ")}. Run \`npm run brand:apply\` ` +
+        `and commit the result.`
+    );
+  }
+}
 
 /**
  * Rewrite the branded strings baked into `index.html`.
@@ -188,6 +212,8 @@ function brandingHtmlPlugin(brand: Branding): Plugin {
 // https://vite.dev/config/
 export default defineConfig(async ({ mode }) => {
   const isWeb = mode === "web";
+
+  if (!isWeb) assertNativeBrandingApplied(branding);
 
   return {
     plugins: [vue(), brandingHtmlPlugin(branding)],
