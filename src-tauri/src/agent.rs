@@ -96,6 +96,17 @@ impl AgentManager {
 
         let agent_id = Uuid::new_v4().to_string();
 
+        // Info level: the command line is config the user wrote, not agent
+        // traffic, and knowing what was actually executed is the first thing
+        // any "the agent won't start" report needs.
+        log::info!(
+            "Spawning agent '{}' ({}): {} {}",
+            name,
+            agent_id,
+            command,
+            args.join(" ")
+        );
+
         // On Windows, we need to use cmd.exe to properly resolve .cmd/.bat files like npx
         #[cfg(target_os = "windows")]
         let mut child = {
@@ -202,6 +213,7 @@ impl AgentManager {
                 }
             }
             // Agent process ended, remove from map
+            log::info!("Agent {} closed its stdout; cleaning up", agent_id_clone);
             agents_clone.write().remove(&agent_id_clone);
             let _ = app_handle_clone.emit("agent-closed", agent_id_clone);
         });
@@ -214,6 +226,10 @@ impl AgentManager {
             for line in reader.lines() {
                 match line {
                     Ok(line_content) => {
+                        // Debug level, so this only reaches the file when the
+                        // user opted in: agent stderr can echo prompt text and
+                        // absolute paths.
+                        log::debug!("[{}] {}", agent_id_clone2, line_content);
                         let stderr_msg = AgentStderr {
                             agent_id: agent_id_clone2.clone(),
                             line: line_content,

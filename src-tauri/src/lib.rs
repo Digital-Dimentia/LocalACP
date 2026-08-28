@@ -1,5 +1,6 @@
 mod agent;
 mod config;
+mod logging;
 
 use agent::{AgentInstance, AgentManager};
 use config::{AgentConfig, AgentTransport, AgentsConfig, ConfigManager};
@@ -125,6 +126,21 @@ fn update_agent(
         .update_agent(name, agent_config)
 }
 
+#[tauri::command]
+fn get_debug_logging() -> bool {
+    logging::debug_logging_enabled()
+}
+
+#[tauri::command]
+fn set_debug_logging(enabled: bool, app_handle: AppHandle) -> Result<(), String> {
+    logging::set_debug_logging(&app_handle, enabled)
+}
+
+#[tauri::command]
+fn get_log_path(app_handle: AppHandle) -> Result<String, String> {
+    logging::log_file_path(&app_handle).map(|p| p.to_string_lossy().to_string())
+}
+
 /// Build an `AgentConfig` from the loosely-typed Tauri command arguments,
 /// applying validation rules per transport kind.
 fn build_agent_config(
@@ -216,13 +232,22 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let state: State<AppState> = app.state();
 
+            // Before anything else in setup: everything below is worth logging.
+            logging::init(&app_handle);
+            log::info!(
+                "{} v{} starting (debug logging {})",
+                app.package_info().name,
+                app.package_info().version,
+                if logging::debug_logging_enabled() { "on" } else { "off" }
+            );
+
             // Initialize config manager
             match ConfigManager::new(&app_handle) {
                 Ok(cm) => {
                     *state.config_manager.write() = Some(cm);
                 }
                 Err(e) => {
-                    eprintln!("Failed to initialize config manager: {}", e);
+                    log::error!("Failed to initialize config manager: {}", e);
                 }
             }
 
@@ -238,7 +263,10 @@ pub fn run() {
             list_running_agents,
             add_agent,
             remove_agent,
-            update_agent
+            update_agent,
+            get_debug_logging,
+            set_debug_logging,
+            get_log_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -297,6 +297,45 @@ export async function pickFolder(title?: string): Promise<string | null> {
 }
 
 // ---------------------------------------------------------------------------
+// Diagnostics / logging
+// ---------------------------------------------------------------------------
+
+/** True when this host writes a log file at all (Tauri only — the browser
+ * build has nowhere to put one, so the Settings section hides itself). */
+export function hasLogFile(): boolean {
+  return isTauriHost();
+}
+
+/** Whether `debug`/`trace` records are currently being written. */
+export async function getDebugLogging(): Promise<boolean> {
+  if (!isTauriHost()) return false;
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<boolean>('get_debug_logging');
+}
+
+/** Turn debug logging on or off. Takes effect immediately and persists. */
+export async function setDebugLogging(enabled: boolean): Promise<void> {
+  if (!isTauriHost()) return;
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke<void>('set_debug_logging', { enabled });
+}
+
+/** Absolute path of the log file, or `null` where there isn't one. */
+export async function getLogPath(): Promise<string | null> {
+  if (!isTauriHost()) return null;
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<string>('get_log_path');
+}
+
+/** Reveal the log file in Finder / Explorer / the desktop file manager. */
+export async function revealLogFile(): Promise<void> {
+  const path = await getLogPath();
+  if (!path) return;
+  const { revealItemInDir } = await import('@tauri-apps/plugin-opener');
+  await revealItemInDir(path);
+}
+
+// ---------------------------------------------------------------------------
 // Filesystem RPC handlers (Tauri desktop only)
 // ---------------------------------------------------------------------------
 

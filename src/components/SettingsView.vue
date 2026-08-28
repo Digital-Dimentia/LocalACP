@@ -1,7 +1,18 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useConfigStore } from '../stores/config';
-import { addAgent, removeAgent, updateAgent, loadKvStore } from '../lib/host';
+import {
+  addAgent,
+  removeAgent,
+  updateAgent,
+  loadKvStore,
+  hasLogFile,
+  getDebugLogging,
+  setDebugLogging,
+  getLogPath,
+  revealLogFile,
+} from '../lib/host';
+import { setDebugForwarding } from '../lib/logger';
 import { setTelemetryEnabled, TELEMETRY_ENABLED_KEY } from '../lib/telemetry';
 import {
   loadThemePreference,
@@ -231,6 +242,41 @@ function handleThemeChange(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Diagnostics / logging
+// ---------------------------------------------------------------------------
+
+// Hidden entirely on hosts with no log file (the browser build).
+const logsAvailable = hasLogFile();
+
+const debugLogging = ref(false);
+const logPath = ref<string | null>(null);
+const logError = ref<string | null>(null);
+
+async function handleDebugLoggingToggle(): Promise<void> {
+  try {
+    await setDebugLogging(debugLogging.value);
+    // Keep the console forwarder in step, otherwise the frontend half of the
+    // pipeline would keep dropping debug records until the next launch.
+    setDebugForwarding(debugLogging.value);
+    logError.value = null;
+  } catch (e) {
+    // Put the checkbox back where it was: the preference did not stick.
+    debugLogging.value = !debugLogging.value;
+    logError.value = e instanceof Error ? e.message : String(e);
+  }
+}
+
+async function handleRevealLog(): Promise<void> {
+  try {
+    await revealLogFile();
+    logError.value = null;
+  } catch (e) {
+    // Most often the file does not exist yet because nothing has been logged.
+    logError.value = e instanceof Error ? e.message : String(e);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Privacy / telemetry
 // ---------------------------------------------------------------------------
 
@@ -244,6 +290,14 @@ onMounted(async () => {
     telemetryOn.value = (await prefs.get<boolean>(TELEMETRY_ENABLED_KEY)) ?? false;
   } catch (e) {
     console.warn('Failed to read telemetry preference:', e);
+  }
+
+  if (!logsAvailable) return;
+  try {
+    debugLogging.value = await getDebugLogging();
+    logPath.value = await getLogPath();
+  } catch (e) {
+    console.warn('Failed to read logging state:', e);
   }
 });
 
@@ -451,6 +505,30 @@ async function handleTelemetryToggle(): Promise<void> {
             never sent. Turning this off stops collection immediately; anything
             already queued is sent as the reporter shuts down.
           </small>
+        </section>
+
+        <section v-if="logsAvailable" class="config-section">
+          <h3>Diagnostics</h3>
+          <label class="telemetry-toggle">
+            <input
+              type="checkbox"
+              v-model="debugLogging"
+              @change="handleDebugLoggingToggle"
+            />
+            <span>Enable debug logging</span>
+          </label>
+          <small>
+            App events, agent launches and errors are always written to the log
+            file below. Debug logging adds verbose detail, including the output
+            agents print on stderr — which can contain prompt text and file
+            paths, so it stays off until you turn it on. The change applies
+            immediately; the file is kept on this device and never uploaded.
+          </small>
+          <p v-if="logPath" class="config-path">{{ logPath }}</p>
+          <p v-if="logError" class="log-error">{{ logError }}</p>
+          <button class="edit-btn" @click="handleRevealLog">
+            Show Log File
+          </button>
         </section>
 
         <section class="config-section">
@@ -754,6 +832,12 @@ async function handleTelemetryToggle(): Promise<void> {
   border-radius: 4px;
   word-break: break-all;
   margin-bottom: 0.25rem;
+}
+
+.log-error {
+  margin: 0.5rem 0;
+  color: var(--bg-danger);
+  font-size: 0.85rem;
 }
 
 .theme-options {
