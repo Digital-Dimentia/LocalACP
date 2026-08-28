@@ -8,6 +8,7 @@ import type { SavedSession, ChatMessage, ToolCallInfo, PermissionRequest, Sessio
 import { getTransportKind, toWireMcpServers } from '../lib/types';
 import type { McpCapabilities, WireMcpServer } from '../lib/types';
 import { AcpClientBridge, createAcpClient } from '../lib/acp-bridge';
+import { beginEcho, consumeEcho, type PendingEcho } from '../lib/prompt-echo';
 import { onAgentStderr, spawnAgent, killAgent } from '../lib/host';
 import { isDesktop } from '../lib/platform';
 import { useConfigStore } from './config';
@@ -102,6 +103,11 @@ export const useSessionStore = defineStore('session', () => {
   const currentSession = ref<SavedSession | null>(null);
   const messages = ref<ChatMessage[]>([]);
   const toolCalls = ref<Map<string, ToolCallInfo>>(new Map());
+
+  // The prompt this client has already rendered and is waiting for the agent
+  // to echo back. Deliberately not reactive: nothing renders it, and making it
+  // a ref would just add a dependency to every chunk that arrives.
+  let pendingEcho: PendingEcho | null = null;
   const isConnected = ref(false);
   const isLoading = ref(false);
   const isConnecting = ref(false);
@@ -225,22 +231,29 @@ export const useSessionStore = defineStore('session', () => {
     const update = notification.update;
     
     switch (update.sessionUpdate) {
-      case 'user_message_chunk':
+      case 'user_message_chunk': {
+        // Agents echo the prompt back, and `session/load` replays history the
+        // same way. Anything this client already rendered itself is consumed
+        // here rather than appended a second time; see lib/prompt-echo.ts.
+        const chunk = update.content.type === 'text' ? update.content.text : '';
+        const { render, pending } = consumeEcho(pendingEcho, chunk);
+        pendingEcho = pending;
+        if (!render) break;
+
         // Append to last user message or create new (for replay)
         const lastUserMsg = messages.value[messages.value.length - 1];
         if (lastUserMsg && lastUserMsg.role === 'user') {
-          if (update.content.type === 'text') {
-            lastUserMsg.content += update.content.text;
-          }
+          lastUserMsg.content += render;
         } else {
           messages.value.push({
             id: crypto.randomUUID(),
             role: 'user',
-            content: update.content.type === 'text' ? update.content.text : '',
+            content: render,
             timestamp: Date.now(),
           });
         }
         break;
+      }
 
       case 'agent_message_chunk': {
         const msg = currentAssistantMessage();
@@ -568,6 +581,8 @@ export const useSessionStore = defineStore('session', () => {
       isConnected.value = true;
       messages.value = [];
       toolCalls.value.clear();
+      // A fresh transcript has nothing outstanding to match an echo against.
+      pendingEcho = null;
       
       // Track successful session creation
       trackEvent('SessionCreated', { agentName, success: 'true' });
@@ -704,6 +719,8 @@ export const useSessionStore = defineStore('session', () => {
       // Clear messages BEFORE loadSession - the agent will stream replay via notifications
       messages.value = [];
       toolCalls.value.clear();
+      // A fresh transcript has nothing outstanding to match an echo against.
+      pendingEcho = null;
 
       // Try to load existing session - may fail with auth_required
       try {
@@ -793,6 +810,10 @@ export const useSessionStore = defineStore('session', () => {
       timestamp: Date.now(),
     });
 
+    // The agent will echo this back as user_message_chunk notifications during
+    // the turn; they arrive before `prompt` resolves.
+    pendingEcho = beginEcho(text);
+
     isLoading.value = true;
     try {
       const response = await acpClient.prompt({
@@ -821,6 +842,11 @@ export const useSessionStore = defineStore('session', () => {
       }
     } finally {
       isLoading.value = false;
+      // The turn is over — including when it failed or was cancelled — so any
+      // echo that was coming has arrived. Dropping it here bounds the window:
+      // a later identical chunk is the user typing again, not an echo, and
+      // must render.
+      pendingEcho = null;
     }
   }
 
@@ -895,6 +921,7 @@ export const useSessionStore = defineStore('session', () => {
     isConnected.value = false;
     messages.value = [];
     toolCalls.value.clear();
+    pendingEcho = null;
     availableModes.value = [];
     currentModeId.value = '';
     availableCommands.value = [];
