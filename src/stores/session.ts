@@ -5,7 +5,8 @@ import { loadKvStore, type KVStore } from '../lib/host/storage';
 import { getAppVersion } from '../lib/host';
 import { trackEvent, trackError } from '../lib/telemetry';
 import type { SavedSession, ChatMessage, ToolCallInfo, PermissionRequest, SessionMode, SlashCommand, ModelInfo, AgentConfig } from '../lib/types';
-import { getTransportKind } from '../lib/types';
+import { getTransportKind, toWireMcpServers } from '../lib/types';
+import type { McpCapabilities, WireMcpServer } from '../lib/types';
 import { AcpClientBridge, createAcpClient } from '../lib/acp-bridge';
 import { onAgentStderr, spawnAgent, killAgent } from '../lib/host';
 import { isDesktop } from '../lib/platform';
@@ -14,6 +15,35 @@ import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk';
 import type { SessionNotification, AuthMethod } from '@agentclientprotocol/sdk';
 
 const STORE_PATH = 'sessions.json';
+
+/**
+ * Assemble the MCP servers to offer a session.
+ *
+ * The list is global to the app rather than per-agent: an MCP server is a
+ * capability of the workspace, not of whichever agent happens to be answering.
+ * Entries the agent cannot accept are dropped rather than sent — an agent is
+ * within its rights to fail the whole `session/new` over one unsupported
+ * transport — and what was dropped is logged, since a silently missing tool
+ * server is exactly the kind of thing that reads as "MCP is broken".
+ */
+function collectMcpServers(
+  mcpCapabilities: McpCapabilities | undefined,
+  agentName: string
+): WireMcpServer[] {
+  const configStore = useConfigStore();
+  const { wire, skipped } = toWireMcpServers(configStore.mcpServers, mcpCapabilities);
+
+  if (skipped.length > 0) {
+    console.warn(
+      `Not offering ${skipped.length} MCP server(s) to '${agentName}': ${skipped.join(', ')}`
+    );
+  }
+  console.log(
+    `Offering ${wire.length} MCP server(s) to '${agentName}':`,
+    wire.map((s) => s.name)
+  );
+  return wire;
+}
 
 /**
  * Enforce the version the agent negotiated in its `initialize` reply.
@@ -455,6 +485,13 @@ export const useSessionStore = defineStore('session', () => {
       // Check if agent supports session loading
       const supportsLoadSession = initResponse.agentCapabilities?.loadSession ?? false;
 
+      // Resolved once from the handshake and reused for the post-auth retry:
+      // the agent's answer cannot change between the two attempts.
+      const mcpServers = collectMcpServers(
+        initResponse.agentCapabilities?.mcpCapabilities as McpCapabilities | undefined,
+        agentName
+      );
+
       if (connectionAborted) {
         await acpClient.disconnect();
         throw new Error('Connection cancelled');
@@ -473,7 +510,7 @@ export const useSessionStore = defineStore('session', () => {
       try {
         sessionResponse = await acpClient.newSession({
           cwd,
-          mcpServers: [],
+          mcpServers,
         });
       } catch (sessionError: unknown) {
         // Check if auth is required (error code -32000)
@@ -506,7 +543,7 @@ export const useSessionStore = defineStore('session', () => {
           // Retry session creation after auth
           sessionResponse = await acpClient.newSession({
             cwd,
-            mcpServers: [],
+            mcpServers,
           });
         } else {
           throw sessionError;
@@ -656,6 +693,11 @@ export const useSessionStore = defineStore('session', () => {
 
       assertNegotiatedProtocolVersion(initResponse.protocolVersion, savedSession.agentName);
 
+      const mcpServers = collectMcpServers(
+        initResponse.agentCapabilities?.mcpCapabilities as McpCapabilities | undefined,
+        savedSession.agentName
+      );
+
       // Store available auth methods for potential retry
       const availableAuthMethods = initResponse.authMethods || [];
 
@@ -668,7 +710,7 @@ export const useSessionStore = defineStore('session', () => {
         await acpClient.loadSession({
           sessionId: savedSession.sessionId,
           cwd: savedSession.cwd,
-          mcpServers: [],
+          mcpServers,
         });
       } catch (sessionError: unknown) {
         // Check if auth is required (error code -32000)
@@ -697,7 +739,7 @@ export const useSessionStore = defineStore('session', () => {
           await acpClient.loadSession({
             sessionId: savedSession.sessionId,
             cwd: savedSession.cwd,
-            mcpServers: [],
+            mcpServers,
           });
         } else {
           throw sessionError;

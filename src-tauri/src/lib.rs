@@ -3,7 +3,9 @@ mod config;
 mod logging;
 
 use agent::{AgentInstance, AgentManager};
-use config::{AgentConfig, AgentTransport, AgentsConfig, ConfigManager};
+use config::{
+    AgentConfig, AgentTransport, AgentsConfig, ConfigManager, McpServerConfig, McpTransport,
+};
 use parking_lot::RwLock;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager, State};
@@ -124,6 +126,148 @@ fn update_agent(
         .as_ref()
         .ok_or_else(|| "Config manager not initialized".to_string())?
         .update_agent(name, agent_config)
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+fn add_mcp_server(
+    name: String,
+    transport: Option<String>,
+    command: Option<String>,
+    args: Option<Vec<String>>,
+    env: Option<std::collections::HashMap<String, String>>,
+    url: Option<String>,
+    headers: Option<std::collections::HashMap<String, String>>,
+    description: Option<String>,
+    enabled: Option<bool>,
+    state: State<AppState>,
+) -> Result<AgentsConfig, String> {
+    let config = build_mcp_server_config(
+        transport,
+        command,
+        args,
+        env,
+        url,
+        headers,
+        description,
+        enabled,
+    )?;
+    let config_manager = state.config_manager.read();
+    config_manager
+        .as_ref()
+        .ok_or_else(|| "Config manager not initialized".to_string())?
+        .add_mcp_server(name, config)
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+fn update_mcp_server(
+    name: String,
+    transport: Option<String>,
+    command: Option<String>,
+    args: Option<Vec<String>>,
+    env: Option<std::collections::HashMap<String, String>>,
+    url: Option<String>,
+    headers: Option<std::collections::HashMap<String, String>>,
+    description: Option<String>,
+    enabled: Option<bool>,
+    state: State<AppState>,
+) -> Result<AgentsConfig, String> {
+    let config = build_mcp_server_config(
+        transport,
+        command,
+        args,
+        env,
+        url,
+        headers,
+        description,
+        enabled,
+    )?;
+    let config_manager = state.config_manager.read();
+    config_manager
+        .as_ref()
+        .ok_or_else(|| "Config manager not initialized".to_string())?
+        .update_mcp_server(name, config)
+}
+
+#[tauri::command]
+fn remove_mcp_server(name: String, state: State<AppState>) -> Result<AgentsConfig, String> {
+    let config_manager = state.config_manager.read();
+    config_manager
+        .as_ref()
+        .ok_or_else(|| "Config manager not initialized".to_string())?
+        .remove_mcp_server(&name)
+}
+
+/// Build an `McpServerConfig` from the loosely-typed Tauri command arguments.
+///
+/// Mirrors `build_agent_config`: the renderer is not trusted to have validated
+/// anything, and a half-formed entry here would be sent to every future
+/// session rather than failing once.
+#[allow(clippy::too_many_arguments)]
+fn build_mcp_server_config(
+    transport: Option<String>,
+    command: Option<String>,
+    args: Option<Vec<String>>,
+    env: Option<std::collections::HashMap<String, String>>,
+    url: Option<String>,
+    headers: Option<std::collections::HashMap<String, String>>,
+    description: Option<String>,
+    enabled: Option<bool>,
+) -> Result<McpServerConfig, String> {
+    let transport_kind = match transport.as_deref() {
+        None | Some("") | Some("stdio") => McpTransport::Stdio,
+        Some("http") => McpTransport::Http,
+        Some("sse") => McpTransport::Sse,
+        Some(other) => return Err(format!("Unknown MCP transport: {}", other)),
+    };
+
+    // An MCP server over stdio is a subprocess the agent launches. Mobile
+    // agents are remote and launch it on their own host, so this is not the
+    // same platform restriction that applies to stdio *agents* and is
+    // deliberately not rejected here.
+    let description = description.filter(|d| !d.is_empty());
+    let enabled = enabled.unwrap_or(true);
+
+    match transport_kind {
+        McpTransport::Stdio => {
+            let command = command
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| "stdio MCP server requires a command".to_string())?;
+            Ok(McpServerConfig {
+                transport: McpTransport::Stdio,
+                command: Some(command),
+                args: Some(args.unwrap_or_default()),
+                env: env.unwrap_or_default(),
+                url: None,
+                headers: None,
+                description,
+                enabled,
+            })
+        }
+        McpTransport::Http | McpTransport::Sse => {
+            let url = url
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| "http/sse MCP server requires a url".to_string())?;
+            let lower = url.to_ascii_lowercase();
+            if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+                return Err(format!(
+                    "MCP server URL must be http:// or https://, got: {}",
+                    url
+                ));
+            }
+            Ok(McpServerConfig {
+                transport: transport_kind,
+                command: None,
+                args: None,
+                env: std::collections::HashMap::new(),
+                url: Some(url),
+                headers: headers.filter(|h| !h.is_empty()),
+                description,
+                enabled,
+            })
+        }
+    }
 }
 
 #[tauri::command]
@@ -264,10 +408,106 @@ pub fn run() {
             add_agent,
             remove_agent,
             update_agent,
+            add_mcp_server,
+            update_mcp_server,
+            remove_mcp_server,
             get_debug_logging,
             set_debug_logging,
             get_log_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stdio_input(command: Option<&str>) -> Result<McpServerConfig, String> {
+        build_mcp_server_config(
+            None,
+            command.map(str::to_string),
+            Some(vec!["server.py".to_string()]),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+    }
+
+    /// No transport field means stdio, matching how the config deserializes.
+    #[test]
+    fn mcp_defaults_to_stdio_and_enabled() {
+        let c = stdio_input(Some("python3")).unwrap();
+        assert_eq!(c.transport, McpTransport::Stdio);
+        assert_eq!(c.command.as_deref(), Some("python3"));
+        assert!(c.enabled);
+    }
+
+    /// An entry with no command would be sent to every future session and
+    /// rejected there, so it is refused at the point of entry instead.
+    #[test]
+    fn mcp_stdio_requires_a_command() {
+        assert!(stdio_input(None).is_err());
+        assert!(stdio_input(Some("")).is_err());
+    }
+
+    #[test]
+    fn mcp_http_requires_an_http_url() {
+        let ok = build_mcp_server_config(
+            Some("http".to_string()),
+            None,
+            None,
+            None,
+            Some("https://mcp.example.com/v1".to_string()),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(ok.transport, McpTransport::Http);
+
+        // Missing entirely.
+        assert!(build_mcp_server_config(
+            Some("sse".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None
+        )
+        .is_err());
+
+        // Right shape, wrong scheme — ws:// belongs to agent transports, not
+        // MCP ones, and is an easy thing to paste in by mistake.
+        assert!(build_mcp_server_config(
+            Some("http".to_string()),
+            None,
+            None,
+            None,
+            Some("wss://mcp.example.com/v1".to_string()),
+            None,
+            None,
+            None
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn mcp_rejects_unknown_transport() {
+        assert!(build_mcp_server_config(
+            Some("carrier-pigeon".to_string()),
+            Some("x".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None
+        )
+        .is_err());
+    }
 }

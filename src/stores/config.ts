@@ -1,7 +1,12 @@
 // Agent configuration store with hot-reload support
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { AgentsConfig, AgentConfig, AgentTransportKind } from '../lib/types';
+import type {
+  AgentsConfig,
+  AgentConfig,
+  AgentTransportKind,
+  McpServerConfig,
+} from '../lib/types';
 import { getTransportKind } from '../lib/types';
 import { restrictedTransports } from '../lib/platform';
 import { getConfig, reloadConfig, getConfigPath, onConfigChanged } from '../lib/host';
@@ -25,6 +30,18 @@ export const useConfigStore = defineStore('config', () => {
   });
 
   const hasAgents = computed(() => agentNames.value.length > 0);
+
+  /** MCP servers as stored, including disabled ones — Settings needs those.
+   * Filtering for what actually goes on the wire is `toWireMcpServers`. */
+  const mcpServers = computed<Record<string, McpServerConfig>>(
+    () => config.value.mcpServers ?? {}
+  );
+
+  const mcpServerNames = computed(() => Object.keys(mcpServers.value));
+
+  const enabledMcpServerCount = computed(
+    () => Object.values(mcpServers.value).filter((s) => s.enabled !== false).length
+  );
 
   /** Transport kind for an agent (defaults to 'stdio' for unknown names). */
   function getAgentTransportKind(name: string): AgentTransportKind {
@@ -101,6 +118,9 @@ export const useConfigStore = defineStore('config', () => {
     stdioAgentNames,
     remoteAgentNames,
     hasAgents,
+    mcpServers,
+    mcpServerNames,
+    enabledMcpServerCount,
     getAgentTransportKind,
     loadConfig,
     reload,

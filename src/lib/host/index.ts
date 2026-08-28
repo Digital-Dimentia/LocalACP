@@ -14,12 +14,14 @@
 import type {
   AgentsConfig,
   AgentConfig,
+  McpServerConfig,
   AgentInstance,
   AgentMessage,
   AgentStderr,
   AgentTransportKind,
 } from '../types';
 import { getTransportKind } from '../types';
+import type { McpTransportKind } from '../types';
 import { isTauriHost, isDesktop } from '../platform';
 
 export type Unlisten = () => void;
@@ -294,6 +296,91 @@ export async function pickFolder(title?: string): Promise<string | null> {
     title: title ?? 'Select Folder',
   });
   return typeof result === 'string' ? result : null;
+}
+
+// ---------------------------------------------------------------------------
+// MCP servers
+// ---------------------------------------------------------------------------
+
+/** Fields the Settings form collects for one MCP server. */
+export interface McpServerInput {
+  transport?: McpTransportKind;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
+  description?: string;
+  enabled?: boolean;
+}
+
+/** Validate an `McpServerInput`, mirroring the Rust `build_mcp_server_config`.
+ * Used only on web, where there is no Rust side to do it. */
+function buildMcpServerConfig(input: McpServerInput): McpServerConfig {
+  const transport: McpTransportKind = input.transport ?? 'stdio';
+
+  if (transport === 'stdio') {
+    if (!input.command) throw new Error('stdio MCP server requires a command');
+    return {
+      transport: 'stdio',
+      command: input.command,
+      args: input.args ?? [],
+      env: input.env ?? {},
+      description: input.description || undefined,
+      enabled: input.enabled ?? true,
+    };
+  }
+
+  if (!input.url) throw new Error('http/sse MCP server requires a url');
+  const lower = input.url.toLowerCase();
+  if (!lower.startsWith('http://') && !lower.startsWith('https://')) {
+    throw new Error(`MCP server URL must be http:// or https://, got: ${input.url}`);
+  }
+  return {
+    transport,
+    url: input.url,
+    headers: input.headers && Object.keys(input.headers).length ? input.headers : undefined,
+    description: input.description || undefined,
+    enabled: input.enabled ?? true,
+  };
+}
+
+export async function addMcpServer(
+  name: string,
+  input: McpServerInput
+): Promise<AgentsConfig> {
+  if (isTauriHost()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<AgentsConfig>('add_mcp_server', { name, ...input });
+  }
+  const config = loadWebConfig();
+  config.mcpServers = { ...(config.mcpServers ?? {}), [name]: buildMcpServerConfig(input) };
+  saveWebConfig(config);
+  return config;
+}
+
+export async function updateMcpServer(
+  name: string,
+  input: McpServerInput
+): Promise<AgentsConfig> {
+  if (isTauriHost()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<AgentsConfig>('update_mcp_server', { name, ...input });
+  }
+  return addMcpServer(name, input);
+}
+
+export async function removeMcpServer(name: string): Promise<AgentsConfig> {
+  if (isTauriHost()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<AgentsConfig>('remove_mcp_server', { name });
+  }
+  const config = loadWebConfig();
+  const servers = { ...(config.mcpServers ?? {}) };
+  delete servers[name];
+  config.mcpServers = servers;
+  saveWebConfig(config);
+  return config;
 }
 
 // ---------------------------------------------------------------------------

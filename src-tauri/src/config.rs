@@ -72,9 +72,79 @@ impl AgentConfig {
     }
 }
 
+
+/// Transport kind for an MCP server.
+///
+/// `stdio` is the only one every ACP agent must support; `http` and `sse` are
+/// gated on the agent advertising `mcpCapabilities.http` / `.sse` during
+/// `initialize`, which the frontend checks before sending them.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum McpTransport {
+    #[default]
+    Stdio,
+    Http,
+    Sse,
+}
+
+fn is_default_mcp_transport(t: &McpTransport) -> bool {
+    *t == McpTransport::Stdio
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn is_true(b: &bool) -> bool {
+    *b
+}
+
+/// One MCP server offered to agents at `session/new` / `session/load`.
+///
+/// Deliberately a superset of the ACP wire shape: `description` and `enabled`
+/// are ours and are stripped before sending. `enabled` lets a user park a
+/// server without deleting the command line and the env vars that go with it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServerConfig {
+    #[serde(default, skip_serializing_if = "is_default_mcp_transport")]
+    pub transport: McpTransport,
+
+    // ----- stdio-only -----
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub env: std::collections::HashMap<String, String>,
+
+    // ----- http / sse only -----
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub headers: Option<std::collections::HashMap<String, String>>,
+
+    /// Free-text note shown in Settings. Never sent to the agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    /// Disabled servers stay in the file but are not offered to sessions.
+    /// Defaults to true so a hand-written entry works without the field.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub enabled: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentsConfig {
     pub agents: IndexMap<String, AgentConfig>,
+
+    /// MCP servers offered to every session. Absent from older `agents.json`
+    /// files, and omitted again when empty so the default file is unchanged.
+    #[serde(
+        default,
+        rename = "mcpServers",
+        skip_serializing_if = "IndexMap::is_empty"
+    )]
+    pub mcp_servers: IndexMap<String, McpServerConfig>,
 }
 
 impl Default for AgentsConfig {
@@ -188,7 +258,10 @@ impl Default for AgentsConfig {
                 std::collections::HashMap::new(),
             ),
         );
-        AgentsConfig { agents }
+        AgentsConfig {
+            agents,
+            mcp_servers: IndexMap::new(),
+        }
     }
 }
 
@@ -281,6 +354,39 @@ impl ConfigManager {
         }
         self.save()?;
         Ok(self.get_config())
+    }
+
+    pub fn add_mcp_server(
+        &self,
+        name: String,
+        config: McpServerConfig,
+    ) -> Result<AgentsConfig, String> {
+        {
+            let mut agents_config = self.config.write();
+            agents_config.mcp_servers.insert(name, config);
+        }
+        self.save()?;
+        Ok(self.get_config())
+    }
+
+    pub fn remove_mcp_server(&self, name: &str) -> Result<AgentsConfig, String> {
+        {
+            let mut agents_config = self.config.write();
+            agents_config.mcp_servers.shift_remove(name);
+        }
+        self.save()?;
+        Ok(self.get_config())
+    }
+
+    /// Replace an MCP server, preserving its position in the file. `insert`
+    /// on an existing key already keeps the slot; a rename is expressed by the
+    /// caller removing the old name first.
+    pub fn update_mcp_server(
+        &self,
+        name: String,
+        config: McpServerConfig,
+    ) -> Result<AgentsConfig, String> {
+        self.add_mcp_server(name, config)
     }
 
     pub fn update_agent(&self, name: String, config: AgentConfig) -> Result<AgentsConfig, String> {
@@ -398,6 +504,59 @@ mod tests {
         // `transport: "stdio"` is omitted by skip_serializing_if; ensure
         // websocket is present in the round-trip output.
         assert!(serialized.contains("\"transport\":\"websocket\""));
+    }
+
+    /// Configs written before MCP support have no `mcpServers` key at all and
+    /// must keep loading, with an empty map rather than a deserialize error.
+    #[test]
+    fn config_without_mcp_servers_still_loads() {
+        let json = r#"{"agents":{"A":{"command":"npx","args":[],"env":{}}}}"#;
+        let cfg: AgentsConfig = serde_json::from_str(json).unwrap();
+        assert!(cfg.mcp_servers.is_empty());
+        // And an empty map is not written back out, so upgrading the app does
+        // not rewrite everyone's file.
+        let out = serde_json::to_string(&cfg).unwrap();
+        assert!(!out.contains("mcpServers"));
+    }
+
+    #[test]
+    fn roundtrips_stdio_mcp_server() {
+        let json = r#"{"agents":{},"mcpServers":{"demo":{"command":"python3","args":["s.py"],"env":{"TOKEN":"x"},"description":"fixture"}}}"#;
+        let cfg: AgentsConfig = serde_json::from_str(json).unwrap();
+        let s = cfg.mcp_servers.get("demo").unwrap();
+        assert_eq!(s.transport, McpTransport::Stdio);
+        assert_eq!(s.command.as_deref(), Some("python3"));
+        assert_eq!(s.env.get("TOKEN").map(String::as_str), Some("x"));
+        assert_eq!(s.description.as_deref(), Some("fixture"));
+
+        let out = serde_json::to_string(&cfg).unwrap();
+        assert!(out.contains("\"mcpServers\""));
+        // stdio and enabled:true are the defaults and stay out of the file.
+        assert!(!out.contains("\"transport\":\"stdio\""));
+        assert!(!out.contains("\"enabled\""));
+    }
+
+    /// A hand-written entry with no `enabled` key is on: the field exists to
+    /// park a server, so its absence must not silently disable one.
+    #[test]
+    fn mcp_server_enabled_defaults_to_true() {
+        let json = r#"{"agents":{},"mcpServers":{"demo":{"command":"x"}}}"#;
+        let cfg: AgentsConfig = serde_json::from_str(json).unwrap();
+        assert!(cfg.mcp_servers.get("demo").unwrap().enabled);
+    }
+
+    #[test]
+    fn roundtrips_http_mcp_server_and_keeps_disabled_flag() {
+        let json = r#"{"agents":{},"mcpServers":{"remote":{"transport":"http","url":"https://mcp.example.com/v1","headers":{"Authorization":"Bearer t"},"enabled":false}}}"#;
+        let cfg: AgentsConfig = serde_json::from_str(json).unwrap();
+        let s = cfg.mcp_servers.get("remote").unwrap();
+        assert_eq!(s.transport, McpTransport::Http);
+        assert_eq!(s.url.as_deref(), Some("https://mcp.example.com/v1"));
+        assert!(!s.enabled);
+
+        let out = serde_json::to_string(&cfg).unwrap();
+        assert!(out.contains("\"transport\":\"http\""));
+        assert!(out.contains("\"enabled\":false"));
     }
 
     #[test]

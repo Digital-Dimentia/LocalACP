@@ -11,6 +11,9 @@ import {
   setDebugLogging,
   getLogPath,
   revealLogFile,
+  addMcpServer,
+  updateMcpServer,
+  removeMcpServer,
 } from '../lib/host';
 import { setDebugForwarding } from '../lib/logger';
 import { setTelemetryEnabled, TELEMETRY_ENABLED_KEY } from '../lib/telemetry';
@@ -19,7 +22,12 @@ import {
   setThemePreference,
   type ThemePreference,
 } from '../lib/theme';
-import { getTransportKind, type AgentTransportKind } from '../lib/types';
+import {
+  getTransportKind,
+  getMcpTransportKind,
+  type AgentTransportKind,
+  type McpTransportKind,
+} from '../lib/types';
 import { restrictedTransports } from '../lib/platform';
 import EnvVarEditor from './EnvVarEditor.vue';
 
@@ -217,6 +225,184 @@ async function handleDelete(name: string) {
     configStore.updateFromEvent(newConfig);
   } catch (e) {
     console.error('Failed to delete agent:', e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// MCP servers
+// ---------------------------------------------------------------------------
+
+interface McpRow {
+  name: string;
+  transport: McpTransportKind;
+  command: string;
+  args: string;
+  env: Record<string, string>;
+  url: string;
+  headers: Record<string, string>;
+  description: string;
+  enabled: boolean;
+}
+
+const mcpServers = computed<McpRow[]>(() =>
+  Object.entries(configStore.mcpServers).map(([name, config]) => ({
+    name,
+    transport: getMcpTransportKind(config),
+    command: config.command ?? '',
+    args: (config.args ?? []).join(' '),
+    env: config.env ?? {},
+    url: config.url ?? '',
+    headers: config.headers ?? {},
+    description: config.description ?? '',
+    // Absent means enabled: a hand-written entry should work without the field.
+    enabled: config.enabled !== false,
+  }))
+);
+
+const showMcpForm = ref(false);
+const editingMcp = ref<string | null>(null);
+const mcpName = ref('');
+const mcpTransport = ref<McpTransportKind>('stdio');
+const mcpCommand = ref('');
+const mcpArgs = ref('');
+const mcpEnv = ref<Record<string, string>>({});
+const mcpUrl = ref('');
+const mcpHeaders = ref<Record<string, string>>({});
+const mcpDescription = ref('');
+const mcpEnabled = ref(true);
+const mcpError = ref('');
+const mcpSubmitting = ref(false);
+
+function resetMcpForm() {
+  mcpName.value = '';
+  mcpTransport.value = 'stdio';
+  mcpCommand.value = '';
+  mcpArgs.value = '';
+  mcpEnv.value = {};
+  mcpUrl.value = '';
+  mcpHeaders.value = {};
+  mcpDescription.value = '';
+  mcpEnabled.value = true;
+  mcpError.value = '';
+  showMcpForm.value = false;
+  editingMcp.value = null;
+}
+
+function startAddMcp() {
+  resetMcpForm();
+  showMcpForm.value = true;
+}
+
+function startEditMcp(server: McpRow) {
+  resetMcpForm();
+  editingMcp.value = server.name;
+  mcpName.value = server.name;
+  mcpTransport.value = server.transport;
+  mcpCommand.value = server.command;
+  mcpArgs.value = server.args;
+  mcpEnv.value = { ...server.env };
+  mcpUrl.value = server.url;
+  mcpHeaders.value = { ...server.headers };
+  mcpDescription.value = server.description;
+  mcpEnabled.value = server.enabled;
+}
+
+/** Collect the form into the shape `addMcpServer` / `updateMcpServer` take. */
+function mcpFormInput() {
+  const isRemote = mcpTransport.value !== 'stdio';
+  return {
+    transport: mcpTransport.value,
+    command: isRemote ? undefined : mcpCommand.value.trim(),
+    args: isRemote ? [] : parseArgs(mcpArgs.value),
+    env: isRemote ? {} : mcpEnv.value,
+    url: isRemote ? mcpUrl.value.trim() : undefined,
+    headers: isRemote ? mcpHeaders.value : undefined,
+    description: mcpDescription.value.trim(),
+    enabled: mcpEnabled.value,
+  };
+}
+
+async function handleMcpSubmit() {
+  mcpError.value = '';
+
+  const name = mcpName.value.trim();
+  if (!name) {
+    mcpError.value = 'Name is required';
+    return;
+  }
+  // The name is what the agent matches tool invocations against, so it has to
+  // survive a JSON object round-trip intact — numeric-looking keys get
+  // reordered by JS object semantics.
+  if (/^\d+$/.test(name)) {
+    mcpError.value = 'Server name cannot be purely numeric';
+    return;
+  }
+
+  if (mcpTransport.value === 'stdio') {
+    if (!mcpCommand.value.trim()) {
+      mcpError.value = 'Command is required for stdio servers';
+      return;
+    }
+  } else {
+    const lower = mcpUrl.value.trim().toLowerCase();
+    if (!lower) {
+      mcpError.value = 'URL is required for http/sse servers';
+      return;
+    }
+    if (!lower.startsWith('http://') && !lower.startsWith('https://')) {
+      mcpError.value = 'MCP server URL must start with http:// or https://';
+      return;
+    }
+  }
+
+  if (!editingMcp.value && configStore.mcpServers[name]) {
+    mcpError.value = 'An MCP server with this name already exists';
+    return;
+  }
+
+  mcpSubmitting.value = true;
+  try {
+    const newConfig = editingMcp.value
+      ? await updateMcpServer(name, mcpFormInput())
+      : await addMcpServer(name, mcpFormInput());
+    configStore.updateFromEvent(newConfig);
+    resetMcpForm();
+  } catch (e) {
+    mcpError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    mcpSubmitting.value = false;
+  }
+}
+
+/** Flip `enabled` straight from the list — the common case is parking a
+ * server for one session, not editing its command line. */
+async function toggleMcpEnabled(server: McpRow) {
+  try {
+    const config = configStore.mcpServers[server.name];
+    if (!config) return;
+    const newConfig = await updateMcpServer(server.name, {
+      transport: server.transport,
+      command: config.command,
+      args: config.args,
+      env: config.env,
+      url: config.url,
+      headers: config.headers,
+      description: config.description,
+      enabled: !server.enabled,
+    });
+    configStore.updateFromEvent(newConfig);
+  } catch (e) {
+    console.error('Failed to toggle MCP server:', e);
+  }
+}
+
+async function handleMcpDelete(name: string) {
+  if (!confirm(`Delete MCP server "${name}"?`)) return;
+  try {
+    const newConfig = await removeMcpServer(name);
+    configStore.updateFromEvent(newConfig);
+  } catch (e) {
+    console.error('Failed to delete MCP server:', e);
   }
 }
 
@@ -459,6 +645,148 @@ async function handleTelemetryToggle(): Promise<void> {
 
             <div v-if="agents.length === 0" class="no-agents">
               No agents configured. Add one to get started!
+            </div>
+          </div>
+        </section>
+
+        <section class="agents-section">
+          <div class="section-header">
+            <h3>MCP Servers</h3>
+            <button class="add-btn" @click="startAddMcp" :disabled="showMcpForm">
+              + Add MCP Server
+            </button>
+          </div>
+
+          <p class="section-note">
+            Offered to every session this app starts, so the agent can call
+            their tools. Enabled servers are sent with <code>session/new</code>
+            and <code>session/load</code>; the agent launches stdio servers
+            itself. These are separate from any MCP servers the agent loads
+            from its own config.
+          </p>
+
+          <div v-if="showMcpForm || editingMcp" class="agent-form">
+            <h4>{{ editingMcp ? 'Edit MCP Server' : 'Add MCP Server' }}</h4>
+
+            <div class="form-group">
+              <label>Name</label>
+              <input
+                v-model="mcpName"
+                type="text"
+                placeholder="demo"
+                :disabled="!!editingMcp"
+              />
+              <small>The agent identifies the server by this name.</small>
+            </div>
+
+            <div class="form-group">
+              <label>Transport</label>
+              <select v-model="mcpTransport">
+                <option value="stdio">stdio (agent launches it)</option>
+                <option value="http">http (remote)</option>
+                <option value="sse">sse (remote)</option>
+              </select>
+              <small>
+                Every agent supports stdio. http and sse are only sent to
+                agents that advertise support for them, and skipped with a
+                warning otherwise.
+              </small>
+            </div>
+
+            <template v-if="mcpTransport === 'stdio'">
+              <div class="form-group">
+                <label>Command</label>
+                <input v-model="mcpCommand" type="text" placeholder="/usr/bin/python3" />
+              </div>
+
+              <div class="form-group">
+                <label>Arguments</label>
+                <input v-model="mcpArgs" type="text" placeholder="/path/to/server.py" />
+                <small>Space-separated. Use quotes for args with spaces.</small>
+              </div>
+
+              <div class="form-group">
+                <EnvVarEditor v-model="mcpEnv" mask-values />
+              </div>
+            </template>
+
+            <template v-else>
+              <div class="form-group">
+                <label>URL</label>
+                <input v-model="mcpUrl" type="text" placeholder="https://mcp.example.com/v1" />
+              </div>
+
+              <div class="form-group">
+                <EnvVarEditor
+                  v-model="mcpHeaders"
+                  mask-values
+                  label="Headers"
+                  empty-text="No headers configured."
+                />
+              </div>
+            </template>
+
+            <div class="form-group">
+              <label>Description</label>
+              <input v-model="mcpDescription" type="text" placeholder="What this server provides" />
+              <small>Shown here only; never sent to the agent.</small>
+            </div>
+
+            <label class="telemetry-toggle">
+              <input type="checkbox" v-model="mcpEnabled" />
+              <span>Enabled</span>
+            </label>
+
+            <small>
+              Commands, arguments and environment variables are handed to the
+              agent, which launches the server on its own host — so point this
+              at servers you trust. They are stored unencrypted in the agents
+              config file, so treat that file as a secret when a server needs
+              an API token.
+            </small>
+
+            <div v-if="mcpError" class="form-error">{{ mcpError }}</div>
+
+            <div class="form-actions">
+              <button class="save-btn" @click="handleMcpSubmit" :disabled="mcpSubmitting">
+                {{ mcpSubmitting ? 'Saving...' : 'Save' }}
+              </button>
+              <button class="cancel-btn" @click="resetMcpForm">Cancel</button>
+            </div>
+          </div>
+
+          <div class="agents-list">
+            <div
+              v-for="server in mcpServers"
+              :key="server.name"
+              class="agent-item"
+              :class="{ disabled: !server.enabled }"
+            >
+              <div class="agent-info">
+                <div class="agent-name">
+                  {{ server.name }}
+                  <span class="agent-transport-badge" :data-kind="server.transport">
+                    {{ server.transport }}
+                  </span>
+                  <span v-if="!server.enabled" class="agent-transport-badge">disabled</span>
+                </div>
+                <div class="agent-command">
+                  <code v-if="server.transport === 'stdio'">{{ server.command }} {{ server.args }}</code>
+                  <code v-else>{{ server.url }}</code>
+                </div>
+                <div v-if="server.description" class="agent-command">{{ server.description }}</div>
+              </div>
+              <div class="agent-actions">
+                <button class="edit-btn" @click="toggleMcpEnabled(server)">
+                  {{ server.enabled ? 'Disable' : 'Enable' }}
+                </button>
+                <button class="edit-btn" @click="startEditMcp(server)">Edit</button>
+                <button class="delete-btn" @click="handleMcpDelete(server.name)">Delete</button>
+              </div>
+            </div>
+
+            <div v-if="mcpServers.length === 0" class="no-agents">
+              No MCP servers configured. Sessions start with none.
             </div>
           </div>
         </section>
@@ -832,6 +1160,16 @@ async function handleTelemetryToggle(): Promise<void> {
   border-radius: 4px;
   word-break: break-all;
   margin-bottom: 0.25rem;
+}
+
+.section-note {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.agent-item.disabled .agent-info {
+  opacity: 0.55;
 }
 
 .log-error {
