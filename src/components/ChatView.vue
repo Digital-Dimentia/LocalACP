@@ -120,6 +120,10 @@ function handleUpdateInvokeParams(id: string, params: string) {
   sessionStore.setToolInvokeParams(id, params);
 }
 
+function handleAcknowledgeInvoke(id: string) {
+  sessionStore.acknowledgeToolInvoke(id);
+}
+
 async function handleRunInvoke(id: string) {
   try {
     await sessionStore.runToolInvoke(id);
@@ -185,6 +189,7 @@ async function handleModelChange(modelId: string) {
         @cancel-permission="handleCancelPermission"
         @update-invoke-params="handleUpdateInvokeParams"
         @run-invoke="handleRunInvoke"
+        @acknowledge-invoke="handleAcknowledgeInvoke"
       />
 
       <!-- Loading indicator -->

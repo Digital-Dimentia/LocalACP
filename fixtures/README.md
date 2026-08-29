@@ -77,6 +77,24 @@ so trying the same call with one argument changed is an edit and a click.
 The mock echoes back the parameters it parsed, which is how you confirm the
 line survived the trip — quotes included.
 
+Running it should *not* add a user row for the line: the row already shows it.
+The agent's reply attaches to the bottom of the same row, marked unread until
+clicked:
+
+```
+🔧 /demo/echo   Echo text back              ×1
+[ --text "hello world"        ]  [ Re-run ]
+/demo/echo --text "hello world"
+────────────────────────────────────────────
+● RESULT   new — click to dismiss
+Invoked `/demo/echo` with params: `--text "hello world"`
+```
+
+A reply that renders as its own Assistant row below instead means the routing
+in `handleSessionUpdate` has come loose. The `tool_call` row the mock also
+emits still lands below the invoke row, after the result — tool calls are
+actions in their own right and keep their own rows.
+
 ### Desktop (stdio)
 
 `npm run start:mock` registers the agent for you and starts the dev build; add

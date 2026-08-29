@@ -93,6 +93,20 @@ export interface ToolInvokeEntry extends TimelineEntryBase {
   params: string;
   /** How many times this row has been run; 0 until the first Run. */
   runCount: number;
+  /** `running` from Run until the turn ends; `answered` once a reply landed. */
+  state: 'draft' | 'running' | 'answered';
+  /**
+   * The agent's reply to the most recent run, routed here instead of into an
+   * assistant row of its own. A call and its answer are one thing; splitting
+   * them leaves the answer to be found by scrolling.
+   */
+  result?: string;
+  /**
+   * True from the moment a result lands until the user acknowledges it. The
+   * row can be well above the fold by then — a Re-run scrolls no further than
+   * where it already is — so the result has to announce itself.
+   */
+  unread: boolean;
 }
 
 /** Out-of-band events worth showing in line: dropped connections, warnings. */
@@ -133,6 +147,24 @@ export function invocationLine(entry: {
 }): string {
   const params = entry.params.trim();
   return params ? `/${entry.command} ${params}` : `/${entry.command}`;
+}
+
+/**
+ * How an answered approval reads across the top of its card.
+ *
+ * The chosen option's own name ("Allow once", "Deny always") says what was
+ * clicked, not what happened. Scanning a transcript for what was let through
+ * wants one of a small closed set of words.
+ */
+export function permissionOutcomeLabel(entry: PermissionEntry): string {
+  if (entry.state === 'cancelled') return 'Cancelled';
+  if (entry.state === 'pending') return 'Awaiting decision';
+  const kind = entry.chosenKind ?? '';
+  if (isAllowOption(kind)) return 'Approved';
+  if (kind === 'reject_once' || kind === 'reject_always') return 'Rejected';
+  // An option kind we do not recognise was answered, but calling it approved
+  // would be a guess in the one direction that matters.
+  return 'Answered';
 }
 
 /**

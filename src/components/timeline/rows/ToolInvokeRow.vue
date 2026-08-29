@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { renderMarkdown } from '../../../lib/markdown';
 import { invocationLine, type ToolInvokeEntry } from '../../../lib/timeline';
 
 const props = defineProps<{
@@ -11,11 +12,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update-params': [params: string];
   run: [];
+  acknowledge: [];
 }>();
 
 const input = ref<HTMLInputElement | null>(null);
 
 const hasRun = computed(() => props.entry.runCount > 0);
+const isRunning = computed(() => props.entry.state === 'running');
+const hasResult = computed(() => (props.entry.result ?? '').length > 0);
 // Exactly what Run will send, assembled by the same function the store uses.
 const preview = computed(() => invocationLine(props.entry));
 
@@ -64,6 +68,22 @@ onMounted(() => {
     <!-- What gets sent, spelled out. The row is a line builder, and a builder
          that hides its output is one more thing to second-guess. -->
     <code class="preview">{{ preview }}</code>
+
+    <!-- The answer belongs to the call that asked for it. Clicking the result
+         marks it seen; by the time it lands the row may be well above the
+         fold, so until then it says so. -->
+    <div
+      v-if="isRunning || hasResult"
+      :class="['result', { 'is-unread': entry.unread }]"
+      @click="entry.unread && emit('acknowledge')"
+    >
+      <div class="result-header">
+        <span v-if="entry.unread" class="unread-dot" aria-hidden="true">●</span>
+        <span class="result-label">{{ isRunning ? 'Running…' : 'Result' }}</span>
+        <span v-if="entry.unread" class="unread-hint">new — click to dismiss</span>
+      </div>
+      <div v-if="hasResult" class="tl-content result-body" v-html="renderMarkdown(entry.result ?? '')" />
+    </div>
   </div>
 </template>
 
@@ -147,6 +167,50 @@ onMounted(() => {
 .run-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.result {
+  margin-top: 0.625rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-color, #e0e0e0);
+}
+
+.result.is-unread {
+  cursor: pointer;
+}
+
+.result-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  margin-bottom: 0.25rem;
+}
+
+.result-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, #666);
+}
+
+.is-unread .result-label {
+  color: var(--text-accent, #0066cc);
+}
+
+.unread-dot {
+  font-size: 0.6rem;
+  color: var(--text-accent, #0066cc);
+}
+
+.unread-hint {
+  font-size: 0.7rem;
+  font-style: italic;
+  color: var(--text-muted, #999);
+}
+
+.result-body {
+  font-size: 0.9rem;
 }
 
 .preview {

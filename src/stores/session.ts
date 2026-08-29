@@ -114,6 +114,14 @@ export const useSessionStore = defineStore('session', () => {
   const timeline = ref<TimelineEntry[]>([]);
   const toolCalls = ref<Map<string, ToolCallInfo>>(new Map());
 
+  // The tool-invocation row whose run is in flight, if any. Assistant text
+  // arriving during that turn belongs to the row rather than to a message of
+  // its own. Not reactive: it steers routing, nothing renders it.
+  let activeInvokeId: string | null = null;
+  // Counts prompts actually sent rather than user rows created, so a session
+  // that only ever runs tool rows still gets named after its first call.
+  let promptsSent = 0;
+
   // The prompt this client has already rendered and is waiting for the agent
   // to echo back. Deliberately not reactive: nothing renders it, and making it
   // a ref would just add a dependency to every chunk that arrives.
@@ -252,8 +260,16 @@ export const useSessionStore = defineStore('session', () => {
     timeline.value = [];
     toolCalls.value.clear();
     pendingPermission.value = null;
+    activeInvokeId = null;
+    promptsSent = 0;
     // A fresh transcript has nothing outstanding to match an echo against.
     pendingEcho = null;
+  }
+
+  /** Looks up a tool-invocation row by id, or null if it is not one. */
+  function findToolInvoke(id: string): ToolInvokeEntry | null {
+    const entry = timeline.value.find((e) => e.id === id);
+    return entry?.type === 'tool_invoke' ? entry : null;
   }
 
   // Returns the run of assistant prose currently open, starting one if the tail
@@ -318,10 +334,16 @@ export const useSessionStore = defineStore('session', () => {
       }
 
       case 'agent_message_chunk': {
-        const msg = currentAssistantMessage();
-        if (update.content.type === 'text') {
-          msg.content += update.content.text;
+        if (update.content.type !== 'text') break;
+        // A run started from a tool row keeps its answer: the reply goes into
+        // that row instead of opening an assistant message below it. Thoughts
+        // and tool calls are unaffected and still get rows of their own.
+        const invoked = activeInvokeId ? findToolInvoke(activeInvokeId) : null;
+        if (invoked) {
+          invoked.result = (invoked.result ?? '') + update.content.text;
+          break;
         }
+        currentAssistantMessage().content += update.content.text;
         break;
       }
 
@@ -857,22 +879,31 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  // Send prompt
-  async function sendPrompt(text: string): Promise<void> {
+  /**
+   * Send a prompt.
+   *
+   * `showUserRow` is false for a tool-invocation row, which already displays
+   * the exact line it is about to send — a user row repeating it verbatim,
+   * directly beneath it, is noise. The echo bookkeeping below happens either
+   * way: the agent still echoes the prompt back, and that echo must be
+   * swallowed whether or not this client drew a row for it.
+   */
+  async function sendPrompt(text: string, showUserRow = true): Promise<void> {
     if (!acpClient || !currentSession.value) {
       throw new Error('No active session');
     }
 
-    // The session title is taken from the opening prompt, so note whether
-    // this is it before the row is appended.
-    const isFirstPrompt = !timeline.value.some((e) => e.type === 'user');
+    promptsSent += 1;
+    const isFirstPrompt = promptsSent === 1;
 
-    pushEntry({
-      type: 'user' as const,
-      id: crypto.randomUUID(),
-      content: text,
-      timestamp: Date.now(),
-    });
+    if (showUserRow) {
+      pushEntry({
+        type: 'user' as const,
+        id: crypto.randomUUID(),
+        content: text,
+        timestamp: Date.now(),
+      });
+    }
 
     // The agent will echo this back as user_message_chunk notifications during
     // the turn; they arrive before `prompt` resolves.
@@ -988,6 +1019,8 @@ export const useSessionStore = defineStore('session', () => {
       description: command.description,
       params: '',
       runCount: 0,
+      state: 'draft',
+      unread: false,
     });
   }
 
@@ -1006,11 +1039,32 @@ export const useSessionStore = defineStore('session', () => {
    * actually sent.
    */
   async function runToolInvoke(id: string): Promise<void> {
-    const entry = timeline.value.find((e) => e.id === id);
-    if (entry?.type !== 'tool_invoke') return;
+    const entry = findToolInvoke(id);
+    if (!entry) return;
+
     const line = invocationLine(entry);
     entry.runCount += 1;
-    await sendPrompt(line);
+    entry.state = 'running';
+    // A re-run replaces the previous answer rather than appending to it, and
+    // an unread marker from the last run has been overtaken by events.
+    entry.result = '';
+    entry.unread = false;
+
+    activeInvokeId = id;
+    try {
+      await sendPrompt(line, false);
+    } finally {
+      activeInvokeId = null;
+      entry.state = 'answered';
+      // Silence is a legitimate answer, but nothing arrived to look at.
+      entry.unread = (entry.result ?? '').length > 0;
+    }
+  }
+
+  /** Clears a row's unread marker once the user has looked at the result. */
+  function acknowledgeToolInvoke(id: string): void {
+    const entry = findToolInvoke(id);
+    if (entry) entry.unread = false;
   }
 
   // Handle permission response
@@ -1198,6 +1252,7 @@ export const useSessionStore = defineStore('session', () => {
     appendToolInvoke,
     setToolInvokeParams,
     runToolInvoke,
+    acknowledgeToolInvoke,
     resolvePermission,
     cancelPermission,
     selectAuthMethod,

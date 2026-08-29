@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { toolKindIcon } from '../../../lib/tool-icons';
-import { isAllowOption, isAlwaysOption, type PermissionEntry } from '../../../lib/timeline';
+import {
+  isAllowOption,
+  isAlwaysOption,
+  permissionOutcomeLabel,
+  type PermissionEntry,
+} from '../../../lib/timeline';
 import { approvalStyle } from '../../../lib/approvals';
 
 const props = defineProps<{ entry: PermissionEntry }>();
@@ -21,11 +26,12 @@ const isPending = computed(() => props.entry.state === 'pending');
 const isInteractive = computed(() => isPending.value && approvalStyle.value === 'inline');
 const toolCall = computed(() => props.entry.request.toolCall);
 
-// What the decision was, phrased for the transcript rather than for a button.
-const outcomeLabel = computed(() => {
-  if (props.entry.state === 'cancelled') return 'Cancelled';
-  return props.entry.chosenName ?? 'Answered';
-});
+// One of a small closed set — Approved / Rejected / Cancelled — so a
+// transcript can be scanned for what was let through. The option's own name
+// ("Allow always") says what was clicked and rides alongside it.
+const outcomeLabel = computed(() => permissionOutcomeLabel(props.entry));
+
+const outcomeClass = computed(() => `outcome-${outcomeLabel.value.toLowerCase()}`);
 
 const outcomeAllowed = computed(
   () => props.entry.state === 'resolved' && isAllowOption(props.entry.chosenKind ?? '')
@@ -51,8 +57,11 @@ onMounted(() => {
   >
     <div class="permission-header">
       <span class="lock">{{ isPending ? '🔐' : (outcomeAllowed ? '✅' : '🚫') }}</span>
-      <span class="headline">
+      <span :class="['headline', isPending ? '' : outcomeClass]">
         {{ isPending ? 'Permission required' : outcomeLabel }}
+      </span>
+      <span v-if="!isPending && entry.chosenName" class="chosen-name">
+        {{ entry.chosenName }}
       </span>
       <span class="tool-kind">{{ toolKindIcon(toolCall.kind) }} {{ toolCall.kind }}</span>
     </div>
@@ -129,6 +138,38 @@ onMounted(() => {
 .headline {
   font-weight: 600;
   font-size: 0.9rem;
+}
+
+/* The decision reads as a badge so it can be picked out at a glance while
+   scrolling, rather than as one more line of prose in the card. */
+.headline.outcome-approved,
+.headline.outcome-rejected,
+.headline.outcome-cancelled,
+.headline.outcome-answered {
+  padding: 0.0625rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.headline.outcome-approved {
+  background: var(--bg-success, #28a745);
+}
+
+.headline.outcome-rejected {
+  background: var(--bg-danger, #dc3545);
+}
+
+.headline.outcome-cancelled,
+.headline.outcome-answered {
+  background: var(--text-muted, #6c757d);
+}
+
+.chosen-name {
+  font-size: 0.8rem;
+  color: var(--text-muted, #666);
 }
 
 .tool-kind {

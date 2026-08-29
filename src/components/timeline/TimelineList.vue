@@ -24,6 +24,7 @@ const emit = defineEmits<{
   'cancel-permission': [];
   'update-invoke-params': [id: string, params: string];
   'run-invoke': [id: string];
+  'acknowledge-invoke': [id: string];
 }>();
 </script>
 
@@ -37,6 +38,7 @@ const emit = defineEmits<{
     @cancel="emit('cancel-permission')"
     @update-params="emit('update-invoke-params', entry.id, $event)"
     @run="emit('run-invoke', entry.id)"
+    @acknowledge="emit('acknowledge-invoke', entry.id)"
   />
 </template>
 
