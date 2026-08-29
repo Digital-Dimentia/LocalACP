@@ -232,7 +232,7 @@ async function handleModelChange(modelId: string) {
         "
         :disabled="isLoading || isReconnecting || awaitingApproval"
         @keydown="handleKeyDown"
-        rows="3"
+        rows="2"
       />
       <button 
         class="send-btn"
