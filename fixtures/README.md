@@ -71,7 +71,7 @@ prefilling `/demo/echo ` as text:
 ```
 
 The parameter line takes focus as the row appears, Enter in it runs the call,
-and the assembled line under the field is exactly what gets sent. After a run
+and the assembled line shown is exactly what gets sent. After a run
 the row stays put with its parameters intact and the button reads **Re-run**,
 so trying the same call with one argument changed is an edit and a click.
 The mock echoes back the parameters it parsed, which is how you confirm the
@@ -82,14 +82,19 @@ The agent's reply attaches to the bottom of the same row, marked unread until
 clicked:
 
 ```
-🔧 /demo/echo   Echo text back              ×1
+🔧 /demo/echo   Echo text back    APPROVED  ×1
 [ --text "hello world"        ]  [ Re-run ]
-/demo/echo --text "hello world"
-▸ 1 tool call
+▾ 1 tool call
+  ⚙️ /demo/echo  /demo/echo --text "hello world"  APPROVED ✓
 ────────────────────────────────────────────
 ● RESULT   new — click to dismiss
 Invoked `/demo/echo` with params: `--text "hello world"`
 ```
+
+The assembled line sits under the field until the run produces a tool call,
+then rides along on that call's line instead of taking a row of its own. Edit
+the parameters afterwards and it reappears under the field, because what the
+row *would* send has diverged from what it *did*.
 
 The `tool_call` the mock emits is absorbed into the row, not left as a row of
 its own: it is expanded while the run is in flight and folds away once the

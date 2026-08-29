@@ -18,6 +18,13 @@ defineProps<{
    * thing twice; as a badge it says the one thing the line did not.
    */
   decision?: string;
+  /**
+   * Extra context for the middle of the line — the invocation that produced
+   * the call, say. Only shown when the call has no location of its own: a
+   * real path is information this line cannot get anywhere else, and must
+   * never be displaced by a caption.
+   */
+  detail?: string;
 }>();
 </script>
 
@@ -28,6 +35,7 @@ defineProps<{
     <span v-if="toolCall.locations?.length" class="tl-path tool-location">
       {{ toolCall.locations[0].path }}
     </span>
+    <span v-else-if="detail" class="tl-path tool-location">{{ detail }}</span>
     <span
       v-if="decision"
       :class="['decision', 'tl-badge', `tl-badge-${decision.toLowerCase()}`]"

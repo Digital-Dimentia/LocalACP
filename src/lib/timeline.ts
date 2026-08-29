@@ -93,6 +93,12 @@ export interface ToolInvokeEntry extends TimelineEntryBase {
   params: string;
   /** How many times this row has been run; 0 until the first Run. */
   runCount: number;
+  /**
+   * The line the last run actually sent. Lets the row tell "this is what I
+   * ran" from "this is what I would run now", which is the whole question
+   * once the parameters are editable after the fact.
+   */
+  lastRunLine?: string;
   /** `running` from Run until the turn ends; `answered` once a reply landed. */
   state: 'draft' | 'running' | 'answered';
   /**

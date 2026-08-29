@@ -1077,6 +1077,7 @@ export const useSessionStore = defineStore('session', () => {
 
     const line = invocationLine(entry);
     entry.runCount += 1;
+    entry.lastRunLine = line;
     entry.state = 'running';
     // A re-run replaces the previous answer rather than appending to it, and
     // an unread marker from the last run has been overtaken by events.

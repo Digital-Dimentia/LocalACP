@@ -109,6 +109,14 @@ const callsSummary = computed(() => {
 // Exactly what Run will send, assembled by the same function the store uses.
 const preview = computed(() => invocationLine(props.entry));
 
+// Once a run has produced calls the line rides along on the first of them, so
+// the standalone copy is redundant — until the parameters are edited, at which
+// point what the row would send differs from what it ran, and that is exactly
+// when the assembled line is worth seeing again.
+const showPreview = computed(
+  () => calls.value.length === 0 || preview.value !== props.entry.lastRunLine
+);
+
 function submit() {
   if (props.canRun === false) return;
   emit('run');
@@ -159,9 +167,11 @@ onMounted(() => {
       </button>
     </div>
 
-    <!-- What gets sent, spelled out. The row is a line builder, and a builder
-         that hides its output is one more thing to second-guess. -->
-    <code class="preview">{{ preview }}</code>
+    <!-- What gets sent, spelled out: a line builder that hides its output is
+         one more thing to second-guess. Once the run has produced calls the
+         line rides along on the first of them instead, which is where you are
+         already looking and costs no row of its own. -->
+    <code v-if="showPreview" class="preview">{{ preview }}</code>
 
     <!-- What the run did, kept with the run that did it. -->
     <div v-if="calls.length" class="calls">
@@ -177,10 +187,11 @@ onMounted(() => {
       </button>
       <div v-if="callsExpanded" class="calls-list">
         <ToolCallLine
-          v-for="call in calls"
+          v-for="(call, index) in calls"
           :key="call.toolCallId"
           :tool-call="call"
           :decision="decisionFor(call.toolCallId)"
+          :detail="index === 0 ? preview : undefined"
         />
         <div
           v-for="permission in orphanDecisions"
