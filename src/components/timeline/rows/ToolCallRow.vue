@@ -15,6 +15,6 @@ defineProps<{ entry: ToolCallEntry }>();
 /* The row only supplies the transcript's gutter and spacing; the line itself
    is drawn by ToolCallLine so it matches the nested copies exactly. */
 .tool-call-row {
-  margin: 0 2rem 0.25rem 0;
+  margin: 0 2rem 0.1875rem 0;
 }
 </style>

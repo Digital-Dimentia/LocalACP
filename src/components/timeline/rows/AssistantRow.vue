@@ -39,7 +39,7 @@ const thoughtExpanded = ref(false);
 }
 
 .thought-section {
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.375rem;
   border: 1px solid var(--border-color, #e0e0e0);
   border-radius: 8px;
   overflow: hidden;
@@ -50,7 +50,7 @@ const thoughtExpanded = ref(false);
   align-items: center;
   gap: 0.5rem;
   width: 100%;
-  padding: 0.5rem 0.75rem;
+  padding: 0.25rem 0.625rem;
   background: var(--bg-hover, #f5f5f5);
   border: none;
   cursor: pointer;
@@ -80,7 +80,7 @@ const thoughtExpanded = ref(false);
 }
 
 .thought-content {
-  padding: 0.75rem 1rem 0.75rem 1.25rem;
+  padding: 0.5rem 0.75rem 0.5rem 1rem;
   background: var(--bg-main, #fafafa);
   border-top: 1px solid var(--border-color, #e0e0e0);
   font-size: 0.9rem;

@@ -198,8 +198,8 @@ onMounted(() => {
 
 <style scoped>
 .invoke-row {
-  margin: 0 2rem 1rem 0;
-  padding: 0.75rem;
+  margin: 0 2rem var(--tl-row-gap) 0;
+  padding: var(--tl-card-pad-y) var(--tl-card-pad-x);
   border-radius: 8px;
   border: 1px solid var(--border-color, #e0e0e0);
   border-left: 4px solid var(--text-accent, #0066cc);
@@ -210,7 +210,7 @@ onMounted(() => {
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--tl-header-gap);
 }
 
 .command {
@@ -242,7 +242,7 @@ onMounted(() => {
 .params {
   flex: 1;
   min-width: 0;
-  padding: 0.5rem 0.625rem;
+  padding: 0.25rem 0.5rem;
   border: 1px solid var(--border-color, #ccc);
   border-radius: 4px;
   background: var(--bg-main, #fff);
@@ -258,13 +258,13 @@ onMounted(() => {
 
 .run-btn {
   min-width: 88px;
-  min-height: 36px;
-  padding: 0.5rem 1rem;
+  min-height: var(--tl-control-h);
+  padding: var(--tl-control-pad);
   border: none;
   border-radius: 4px;
   background: var(--bg-primary, #0066cc);
   color: #fff;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
 }
@@ -279,7 +279,7 @@ onMounted(() => {
 }
 
 .calls {
-  margin-top: 0.5rem;
+  margin-top: 0.375rem;
 }
 
 .calls-toggle {
@@ -319,7 +319,7 @@ onMounted(() => {
 /* The nested approval keeps its own card, but not the transcript gutter it
    would use standing on its own. */
 .invoke-row :deep(.permission-row) {
-  margin: 0.625rem 0 0 0;
+  margin: 0.4375rem 0 0 0;
 }
 
 .orphan-decision {
@@ -332,8 +332,8 @@ onMounted(() => {
 }
 
 .result {
-  margin-top: 0.625rem;
-  padding-top: 0.5rem;
+  margin-top: 0.4375rem;
+  padding-top: 0.375rem;
   border-top: 1px solid var(--border-color, #e0e0e0);
 }
 
@@ -377,7 +377,7 @@ onMounted(() => {
 
 .preview {
   display: block;
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 0.75rem;
   color: var(--text-muted, #666);
@@ -392,10 +392,6 @@ onMounted(() => {
   .params {
     /* Avoid iOS auto-zoom on focus when font-size < 16px. */
     font-size: 16px;
-  }
-
-  .run-btn {
-    min-height: 44px;
   }
 }
 </style>

@@ -22,8 +22,8 @@ const icons: Record<NoticeEntry['level'], string> = {
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
-  margin: 0 2rem 0.75rem 0;
-  padding: 0.5rem 0.75rem;
+  margin: 0 2rem var(--tl-row-gap) 0;
+  padding: 0.3125rem 0.625rem;
   border-radius: 4px;
   font-size: 0.8rem;
   border-left: 2px solid var(--border-color);

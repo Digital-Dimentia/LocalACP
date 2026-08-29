@@ -6,14 +6,39 @@
  * tweaked. Class names are `tl-` prefixed to keep them out of the app's way.
  */
 
+/* Vertical density, in one place.
+ *
+ * The transcript is the app's main surface and every row pays these numbers,
+ * so they are variables rather than a value copied into each component and
+ * then tuned in six places. Horizontal spacing is left alone: it is the
+ * vertical axis that decides how much conversation fits on screen.
+ */
+:root {
+  --tl-row-gap: 0.5rem;
+  --tl-card-pad-y: 0.4375rem;
+  --tl-card-pad-x: 0.625rem;
+  --tl-header-gap: 0.25rem;
+  --tl-control-h: 26px;
+  --tl-control-pad: 0.25rem 0.75rem;
+}
+
+@media (max-width: 800px) {
+  :root {
+    /* Touch targets do not shrink. Density is a pointer-only luxury; a 26px
+       button is a miss on a phone. */
+    --tl-control-h: 44px;
+    --tl-control-pad: 0.5rem 1rem;
+  }
+}
+
 .tl-row {
-  margin-bottom: 1rem;
-  padding: 0.75rem;
+  margin-bottom: var(--tl-row-gap);
+  padding: var(--tl-card-pad-y) var(--tl-card-pad-x);
   border-radius: 8px;
 }
 
 .tl-row-header {
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--tl-header-gap);
 }
 
 .tl-role {
@@ -29,12 +54,23 @@
 }
 
 .tl-content p {
-  margin: 0.5rem 0;
+  margin: 0.35rem 0;
+}
+
+/* The card's own padding already separates the text from its edge; a leading
+   and trailing block margin on top of it doubles the gap on every single
+   message, which is the largest avoidable cost in the whole transcript. */
+.tl-content > :first-child {
+  margin-top: 0;
+}
+
+.tl-content > :last-child {
+  margin-bottom: 0;
 }
 
 .tl-content ol,
 .tl-content ul {
-  margin: 0.5rem 0;
+  margin: 0.35rem 0;
   padding-left: 1.5rem;
 }
 
@@ -45,7 +81,8 @@
 .tl-content pre {
   background: var(--bg-code, #282c34);
   color: var(--text-code, #abb2bf);
-  padding: 0.75rem;
+  margin: 0.35rem 0;
+  padding: 0.5rem 0.625rem;
   border-radius: 4px;
   overflow-x: auto;
 }

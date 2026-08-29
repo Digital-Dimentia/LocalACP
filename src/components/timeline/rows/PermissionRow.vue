@@ -103,8 +103,8 @@ onMounted(() => {
 
 <style scoped>
 .permission-row {
-  margin: 0 2rem 1rem 0;
-  padding: 0.75rem;
+  margin: 0 2rem var(--tl-row-gap) 0;
+  padding: var(--tl-card-pad-y) var(--tl-card-pad-x);
   border-radius: 8px;
   border: 1px solid var(--border-color, #e0e0e0);
   background: var(--bg-assistant, #f5f5f5);
@@ -132,7 +132,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--tl-header-gap);
 }
 
 .headline {
@@ -180,7 +180,7 @@ onMounted(() => {
 }
 
 .permission-body {
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.375rem;
 }
 
 .tool-title {
@@ -211,11 +211,11 @@ onMounted(() => {
 .option-btn {
   flex: 1;
   min-width: 120px;
-  min-height: 36px;
-  padding: 0.5rem 0.875rem;
+  min-height: var(--tl-control-h);
+  padding: var(--tl-control-pad);
   border: none;
   border-radius: 4px;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s;
@@ -267,10 +267,6 @@ onMounted(() => {
 @media (max-width: 800px) {
   .permission-row {
     margin-right: 0;
-  }
-
-  .option-btn {
-    min-height: 44px;
   }
 }
 </style>

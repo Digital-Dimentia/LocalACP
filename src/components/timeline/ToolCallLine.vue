@@ -47,7 +47,7 @@ defineProps<{
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.375rem 0.625rem;
+  padding: 0.25rem 0.5rem;
   border-radius: 4px;
   font-size: 0.8rem;
   background: rgba(0, 0, 0, 0.04);

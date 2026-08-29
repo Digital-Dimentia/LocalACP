@@ -253,7 +253,7 @@ async function handleModelChange(modelId: string) {
 }
 
 .chat-header {
-  padding: 1rem;
+  padding: 0.625rem 1rem;
   border-bottom: 1px solid var(--border-color, #e0e0e0);
   display: flex;
   align-items: center;
@@ -283,14 +283,14 @@ async function handleModelChange(modelId: string) {
 .messages-container {
   flex: 1;
   overflow-y: auto;
-  padding: 1rem;
+  padding: 0.75rem;
 }
 
 .loading-indicator {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.75rem;
+  padding: 0.375rem 0.625rem;
   color: var(--text-muted, #666);
 }
 
@@ -323,7 +323,7 @@ async function handleModelChange(modelId: string) {
   align-items: center;
   gap: 0.5rem;
   width: 100%;
-  padding: 0.5rem 1rem;
+  padding: 0.3125rem 0.75rem;
   border: none;
   border-top: 1px solid #f59e0b;
   background: rgba(245, 158, 11, 0.15);
@@ -356,13 +356,13 @@ async function handleModelChange(modelId: string) {
   position: relative;
   display: flex;
   gap: 0.5rem;
-  padding: 1rem;
+  padding: 0.625rem 0.75rem;
   border-top: 1px solid var(--border-color, #e0e0e0);
 }
 
 textarea {
   flex: 1;
-  padding: 0.75rem;
+  padding: 0.5rem 0.625rem;
   border: 1px solid var(--border-color, #ccc);
   border-radius: 6px;
   font-size: 1rem;
@@ -376,7 +376,7 @@ textarea:focus {
 }
 
 .send-btn {
-  padding: 0.75rem 1.5rem;
+  padding: 0.5rem 1.5rem;
   background: var(--bg-primary, #0066cc);
   color: white;
   border: none;
