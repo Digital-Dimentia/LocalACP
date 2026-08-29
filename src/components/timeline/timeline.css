@@ -92,6 +92,28 @@
   font-size: 0.9rem;
 }
 
+/* Decision badges: APPROVED / REJECTED / …
+ *
+ * Three rows show one of these, so the shape lives here. What each row varies
+ * is only where it sits, which stays in that row's own styles.
+ */
+.tl-badge {
+  padding: 0.0625rem 0.35rem;
+  border-radius: 3px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.tl-badge-approved { background: var(--bg-success, #28a745); }
+.tl-badge-rejected { background: var(--bg-danger, #dc3545); }
+.tl-badge-cancelled,
+.tl-badge-mixed,
+.tl-badge-answered { background: var(--text-muted, #6c757d); }
+
 /* Monospace path/command text, used by tool-call and approval rows. */
 .tl-path {
   font-family: 'Consolas', 'Monaco', monospace;

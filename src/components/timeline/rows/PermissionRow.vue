@@ -31,7 +31,8 @@ const toolCall = computed(() => props.entry.request.toolCall);
 // ("Allow always") says what was clicked and rides alongside it.
 const outcomeLabel = computed(() => permissionOutcomeLabel(props.entry));
 
-const outcomeClass = computed(() => `outcome-${outcomeLabel.value.toLowerCase()}`);
+// Not pending means the headline is a decision, and decisions are badges.
+const outcomeClass = computed(() => ['tl-badge', `tl-badge-${outcomeLabel.value.toLowerCase()}`]);
 
 const outcomeAllowed = computed(
   () => props.entry.state === 'resolved' && isAllowOption(props.entry.chosenKind ?? '')
@@ -57,7 +58,7 @@ onMounted(() => {
   >
     <div class="permission-header">
       <span class="lock">{{ isPending ? '🔐' : (outcomeAllowed ? '✅' : '🚫') }}</span>
-      <span :class="['headline', isPending ? '' : outcomeClass]">
+      <span :class="['headline', ...(isPending ? [] : outcomeClass)]">
         {{ isPending ? 'Permission required' : outcomeLabel }}
       </span>
       <span v-if="!isPending && entry.chosenName" class="chosen-name">
@@ -138,33 +139,6 @@ onMounted(() => {
 .headline {
   font-weight: 600;
   font-size: 0.9rem;
-}
-
-/* The decision reads as a badge so it can be picked out at a glance while
-   scrolling, rather than as one more line of prose in the card. */
-.headline.outcome-approved,
-.headline.outcome-rejected,
-.headline.outcome-cancelled,
-.headline.outcome-answered {
-  padding: 0.0625rem 0.4rem;
-  border-radius: 3px;
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #fff;
-}
-
-.headline.outcome-approved {
-  background: var(--bg-success, #28a745);
-}
-
-.headline.outcome-rejected {
-  background: var(--bg-danger, #dc3545);
-}
-
-.headline.outcome-cancelled,
-.headline.outcome-answered {
-  background: var(--text-muted, #6c757d);
 }
 
 .chosen-name {

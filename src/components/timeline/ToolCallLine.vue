@@ -30,7 +30,7 @@ defineProps<{
     </span>
     <span
       v-if="decision"
-      :class="['decision', `decision-${decision.toLowerCase()}`]"
+      :class="['decision', 'tl-badge', `tl-badge-${decision.toLowerCase()}`]"
     >
       {{ decision }}
     </span>
@@ -91,19 +91,7 @@ defineProps<{
 .decision {
   /* Pushes right whether or not a location is present to absorb the slack. */
   margin-left: auto;
-  padding: 0.0625rem 0.35rem;
-  border-radius: 3px;
-  font-size: 0.625rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #fff;
 }
-
-.decision-approved { background: var(--bg-success, #28a745); }
-.decision-rejected { background: var(--bg-danger, #dc3545); }
-.decision-cancelled,
-.decision-answered { background: var(--text-muted, #6c757d); }
 
 .tool-status {
   font-size: 0.75rem;

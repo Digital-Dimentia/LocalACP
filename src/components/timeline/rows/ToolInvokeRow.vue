@@ -60,6 +60,22 @@ const orphanDecisions = computed(() =>
   )
 );
 
+/**
+ * The run's approval outcome, shown in the header where it cannot be folded.
+ *
+ * The per-line badges live inside the collapsible list, which closes itself as
+ * soon as the run is answered — so on their own they hid the decision exactly
+ * when there was one to read. This is the copy that is always visible.
+ */
+const decisionSummary = computed(() => {
+  const answered = props.entry.permissions.filter((p) => p.state !== 'pending');
+  if (answered.length === 0) return undefined;
+  const labels = answered.map(permissionOutcomeLabel);
+  // A refusal is never averaged away by whatever else was allowed.
+  if (labels.includes('Rejected')) return 'Rejected';
+  return new Set(labels).size === 1 ? labels[0] : 'Mixed';
+});
+
 function decisionFor(toolCallId: string): string | undefined {
   return decisions.value.get(toolCallId);
 }
@@ -111,8 +127,16 @@ onMounted(() => {
       <span class="wrench">🔧</span>
       <span class="command">/{{ entry.command }}</span>
       <span v-if="entry.description" class="description">{{ entry.description }}</span>
-      <span v-if="hasRun" class="run-count" :title="`Run ${entry.runCount} time(s)`">
-        ×{{ entry.runCount }}
+      <span class="header-right">
+        <span
+          v-if="decisionSummary"
+          :class="['tl-badge', `tl-badge-${decisionSummary.toLowerCase()}`]"
+        >
+          {{ decisionSummary }}
+        </span>
+        <span v-if="hasRun" class="run-count" :title="`Run ${entry.runCount} time(s)`">
+          ×{{ entry.runCount }}
+        </span>
       </span>
     </div>
 
@@ -221,6 +245,7 @@ onMounted(() => {
 
 .description {
   flex: 1;
+  min-width: 0;
   font-size: 0.75rem;
   color: var(--text-muted, #666);
   white-space: nowrap;
@@ -228,8 +253,16 @@ onMounted(() => {
   text-overflow: ellipsis;
 }
 
-.run-count {
+/* One group so the trailing items stay right-aligned whether or not the
+   command has a description to absorb the slack. */
+.header-right {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
   margin-left: auto;
+}
+
+.run-count {
   font-size: 0.75rem;
   color: var(--text-muted, #666);
 }

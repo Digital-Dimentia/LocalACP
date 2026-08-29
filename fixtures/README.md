@@ -100,13 +100,20 @@ because a folded failure is a silent one.
 `demo/echo` also asks for permission before it runs, and that approval belongs
 to the same row. While it is unanswered it renders in full *inside* the row,
 never folded, and the composer stays blocked with the sticky bar pointing at
-it — nesting must not hide a request. Once answered it collapses onto the
-tool-call line it gated:
+it — nesting must not hide a request. Once answered the outcome shows in the row's
+header, where the collapsible list cannot fold it away, and again on the
+tool-call line it gated when that list is open:
 
 ```
+🔧 /demo/echo   Echoes text        APPROVED  ×1
+[ --text "Foo Bar"        ]  [ Re-run ]
+/demo/echo --text "Foo Bar"
 ▾ 1 tool call
   ⚙️ /demo/echo                    APPROVED  ✓
 ```
+
+Deny instead and the header reads REJECTED, the call is reported `failed`, and
+the list stays expanded — failures do not fold.
 
 An approval left as its own row below the tool row, or a composer that
 unblocks while one is unanswered, is a regression in `allPermissions()` in
