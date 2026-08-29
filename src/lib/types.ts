@@ -202,15 +202,6 @@ export interface SavedSession {
   supportsLoadSession?: boolean; // Whether the agent supports session/load
 }
 
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  thought?: string;
-  timestamp: number;
-  toolCalls?: ToolCallInfo[];
-}
-
 export interface ToolCallInfo {
   toolCallId: string;
   title: string;

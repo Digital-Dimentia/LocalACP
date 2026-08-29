@@ -84,6 +84,8 @@ fi
 
 echo
 echo "Starting the desktop build. Pick '$AGENT_NAME' and send any prompt."
-echo "Expected: one Assistant message holding both tool rows and the text."
+echo "Expected: two tool-call rows, assistant text, then an approval row with"
+echo "buttons in line; answering it unblocks the composer and leaves the"
+echo "decision in the transcript."
 cd "$REPO_DIR"
 exec npm run tauri dev

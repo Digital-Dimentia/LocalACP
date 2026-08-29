@@ -4,7 +4,13 @@ import { ref, computed, watch } from 'vue';
 import { loadKvStore, type KVStore } from '../lib/host/storage';
 import { getAppVersion } from '../lib/host';
 import { trackEvent, trackError } from '../lib/telemetry';
-import type { SavedSession, ChatMessage, ToolCallInfo, PermissionRequest, SessionMode, SlashCommand, ModelInfo, AgentConfig } from '../lib/types';
+import type { SavedSession, ToolCallInfo, PermissionRequest, SessionMode, SlashCommand, ModelInfo, AgentConfig } from '../lib/types';
+import type {
+  AssistantEntry,
+  NoticeEntry,
+  PermissionEntry,
+  TimelineEntry,
+} from '../lib/timeline';
 import { getTransportKind, toWireMcpServers } from '../lib/types';
 import type { McpCapabilities, WireMcpServer } from '../lib/types';
 import { AcpClientBridge, createAcpClient } from '../lib/acp-bridge';
@@ -101,7 +107,9 @@ export const useSessionStore = defineStore('session', () => {
   // State
   const savedSessions = ref<SavedSession[]>([]);
   const currentSession = ref<SavedSession | null>(null);
-  const messages = ref<ChatMessage[]>([]);
+  // The conversation as a list of typed rows. See lib/timeline.ts for why
+  // this is not a list of chat messages with things hung off them.
+  const timeline = ref<TimelineEntry[]>([]);
   const toolCalls = ref<Map<string, ToolCallInfo>>(new Map());
 
   // The prompt this client has already rendered and is waiting for the agent
@@ -151,7 +159,17 @@ export const useSessionStore = defineStore('session', () => {
 
   // Computed
   const hasActiveSession = computed(() => currentSession.value !== null);
-  const messageList = computed(() => messages.value);
+  const timelineEntries = computed(() => timeline.value);
+  /**
+   * The approval the user is being asked for right now, if any. Derived from
+   * the timeline rather than tracked separately so the row and the gate can
+   * never disagree about whether something is outstanding.
+   */
+  const pendingPermissionEntry = computed(
+    () => timeline.value.find(
+      (e): e is PermissionEntry => e.type === 'permission' && e.state === 'pending'
+    ) ?? null
+  );
   const toolCallList = computed(() => Array.from(toolCalls.value.values()));
   // Only sessions that support resuming (loadSession capability)
   const resumableSessions = computed(() => 
@@ -193,37 +211,79 @@ export const useSessionStore = defineStore('session', () => {
     isConnected.value = false;
     isLoading.value = false;
     pendingPermission.value = null;
-    error.value = `Connection lost: ${reason ?? 'transport closed'}`;
+    // Nobody is left to answer an outstanding request, and a stuck approval
+    // row would gate the composer forever.
+    abandonPendingPermissions();
+    const message = `Connection lost: ${reason ?? 'transport closed'}`;
+    error.value = message;
+    pushNotice('error', message);
   }
 
-  // Returns the assistant message the current turn is building, creating one if
-  // the turn has not opened with an assistant chunk yet. Every renderable part of
-  // an assistant turn (text, thought, tool calls) hangs off this container.
-  function currentAssistantMessage(): ChatMessage {
-    const last = messages.value[messages.value.length - 1];
-    if (last && last.role === 'assistant') {
+  /** Appends a row and hands it back already reactive. */
+  function pushEntry<T extends TimelineEntry>(entry: T): T {
+    timeline.value.push(entry);
+    return timeline.value[timeline.value.length - 1] as T;
+  }
+
+  /** Records an out-of-band event in the transcript. */
+  function pushNotice(level: NoticeEntry['level'], content: string): NoticeEntry {
+    return pushEntry<NoticeEntry>({
+      type: 'notice',
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      level,
+      content,
+    });
+  }
+
+  /** Marks every still-open approval as cancelled (transport gone, reset). */
+  function abandonPendingPermissions(): void {
+    for (const entry of timeline.value) {
+      if (entry.type === 'permission' && entry.state === 'pending') {
+        entry.state = 'cancelled';
+      }
+    }
+  }
+
+  /** Drops the whole transcript. Used when a session starts or is replaced. */
+  function resetTimeline(): void {
+    timeline.value = [];
+    toolCalls.value.clear();
+    pendingPermission.value = null;
+    // A fresh transcript has nothing outstanding to match an echo against.
+    pendingEcho = null;
+  }
+
+  // Returns the run of assistant prose currently open, starting one if the tail
+  // of the timeline is anything else. Only text and thought accumulate here;
+  // tool calls and approvals are rows of their own.
+  function currentAssistantMessage(): AssistantEntry {
+    const last = timeline.value[timeline.value.length - 1];
+    if (last && last.type === 'assistant') {
       return last;
     }
-    const created: ChatMessage = {
+    // Anything else at the tail — a tool call, an approval — has closed the
+    // previous run of prose. Opening a new row here is what makes the
+    // transcript interleave in the order events actually happened.
+    return pushEntry<AssistantEntry>({
+      type: 'assistant',
       id: crypto.randomUUID(),
-      role: 'assistant',
       content: '',
       timestamp: Date.now(),
-      toolCalls: [],
-    };
-    messages.value.push(created);
-    return messages.value[messages.value.length - 1];
+    });
   }
 
-  // Registers a tool call on the current assistant message and in the lookup map.
-  // Both hold the same object so later updates need no write-through.
+  // Appends a tool call as its own row and registers it in the lookup map.
+  // Both hold the same object, so a later `tool_call_update` needs no
+  // write-through to keep the row current.
   function attachToolCall(toolCall: ToolCallInfo): void {
-    const msg = currentAssistantMessage();
-    if (!msg.toolCalls) {
-      msg.toolCalls = [];
-    }
-    msg.toolCalls.push(toolCall);
-    toolCalls.value.set(toolCall.toolCallId, msg.toolCalls[msg.toolCalls.length - 1]);
+    const entry = pushEntry({
+      type: 'tool_call' as const,
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      toolCall,
+    });
+    toolCalls.value.set(toolCall.toolCallId, entry.toolCall);
   }
 
   // Session update handler
@@ -240,14 +300,14 @@ export const useSessionStore = defineStore('session', () => {
         pendingEcho = pending;
         if (!render) break;
 
-        // Append to last user message or create new (for replay)
-        const lastUserMsg = messages.value[messages.value.length - 1];
-        if (lastUserMsg && lastUserMsg.role === 'user') {
-          lastUserMsg.content += render;
+        // Append to the open user row, or start one (replayed history).
+        const last = timeline.value[timeline.value.length - 1];
+        if (last && last.type === 'user') {
+          last.content += render;
         } else {
-          messages.value.push({
+          pushEntry({
+            type: 'user' as const,
             id: crypto.randomUUID(),
-            role: 'user',
             content: render,
             timestamp: Date.now(),
           });
@@ -455,11 +515,13 @@ export const useSessionStore = defineStore('session', () => {
         handleUnexpectedClose(reason);
       };
       
-      // Sync bridge's pendingPermissionRequest to store's pendingPermission
+      // Mirror the bridge's outstanding request into the store, and give it a
+      // row in the transcript so it can be answered in line.
       watch(
         () => acpClient?.pendingPermissionRequest.value,
         (newValue) => {
           pendingPermission.value = newValue ?? null;
+          if (newValue) appendPermissionRequest(newValue);
         },
         { immediate: true }
       );
@@ -579,10 +641,7 @@ export const useSessionStore = defineStore('session', () => {
       await saveSessionsToStore();
       
       isConnected.value = true;
-      messages.value = [];
-      toolCalls.value.clear();
-      // A fresh transcript has nothing outstanding to match an echo against.
-      pendingEcho = null;
+      resetTimeline();
       
       // Track successful session creation
       trackEvent('SessionCreated', { agentName, success: 'true' });
@@ -677,11 +736,13 @@ export const useSessionStore = defineStore('session', () => {
         handleUnexpectedClose(reason);
       };
 
-      // Sync bridge's pendingPermissionRequest to store's pendingPermission
+      // Mirror the bridge's outstanding request into the store, and give it a
+      // row in the transcript so it can be answered in line.
       watch(
         () => acpClient?.pendingPermissionRequest.value,
         (newValue) => {
           pendingPermission.value = newValue ?? null;
+          if (newValue) appendPermissionRequest(newValue);
         },
         { immediate: true }
       );
@@ -716,11 +777,9 @@ export const useSessionStore = defineStore('session', () => {
       // Store available auth methods for potential retry
       const availableAuthMethods = initResponse.authMethods || [];
 
-      // Clear messages BEFORE loadSession - the agent will stream replay via notifications
-      messages.value = [];
-      toolCalls.value.clear();
-      // A fresh transcript has nothing outstanding to match an echo against.
-      pendingEcho = null;
+      // Clear the transcript BEFORE loadSession — the agent replays history
+      // through the same notifications a live turn uses.
+      resetTimeline();
 
       // Try to load existing session - may fail with auth_required
       try {
@@ -802,10 +861,13 @@ export const useSessionStore = defineStore('session', () => {
       throw new Error('No active session');
     }
 
-    // Add user message
-    messages.value.push({
+    // The session title is taken from the opening prompt, so note whether
+    // this is it before the row is appended.
+    const isFirstPrompt = !timeline.value.some((e) => e.type === 'user');
+
+    pushEntry({
+      type: 'user' as const,
       id: crypto.randomUUID(),
-      role: 'user',
       content: text,
       timestamp: Date.now(),
     });
@@ -834,8 +896,8 @@ export const useSessionStore = defineStore('session', () => {
         stopReason: response.stopReason || 'unknown',
       });
 
-      // Update session title if it's the first message
-      if (messages.value.length === 2 && currentSession.value) {
+      // Name the session after the prompt that opened it.
+      if (isFirstPrompt && currentSession.value) {
         currentSession.value.title = text.slice(0, 50) + (text.length > 50 ? '...' : '');
         currentSession.value.lastUpdated = Date.now();
         await saveSessionsToStore();
@@ -886,14 +948,48 @@ export const useSessionStore = defineStore('session', () => {
     error.value = null;
   }
 
+  /**
+   * Gives the agent's request a row in the transcript. Requests are ignored if
+   * one is already open for the same tool call: agents may re-ask after a
+   * reconnect, and a second row would let one prompt be answered twice.
+   */
+  function appendPermissionRequest(request: PermissionRequest): void {
+    const toolCallId = request.toolCall.toolCallId;
+    const duplicate = timeline.value.some(
+      (e) => e.type === 'permission' && e.state === 'pending' && e.toolCallId === toolCallId
+    );
+    if (duplicate) return;
+
+    pushEntry<PermissionEntry>({
+      type: 'permission',
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      toolCallId,
+      request,
+      state: 'pending',
+    });
+  }
+
   // Handle permission response
   function resolvePermission(optionId: string): void {
+    const entry = pendingPermissionEntry.value;
+    if (entry) {
+      const option = entry.request.options.find((o) => o.optionId === optionId);
+      // The row is kept, not removed: the transcript is the record of what was
+      // permitted and how, which the modal it replaces never left behind.
+      entry.state = 'resolved';
+      entry.chosenOptionId = optionId;
+      entry.chosenName = option?.name;
+      entry.chosenKind = option?.kind;
+    }
     if (acpClient) {
       acpClient.resolvePermission(optionId);
     }
   }
 
   function cancelPermission(): void {
+    const entry = pendingPermissionEntry.value;
+    if (entry) entry.state = 'cancelled';
     if (acpClient) {
       acpClient.cancelPermission();
     }
@@ -914,14 +1010,12 @@ export const useSessionStore = defineStore('session', () => {
     trackEvent('SessionDisconnected', { 
       agentName,
       sessionDurationSeconds: String(sessionDuration),
-      messageCount: String(messages.value.length),
+      messageCount: String(timeline.value.length),
     });
     
     currentSession.value = null;
     isConnected.value = false;
-    messages.value = [];
-    toolCalls.value.clear();
-    pendingEcho = null;
+    resetTimeline();
     availableModes.value = [];
     currentModeId.value = '';
     availableCommands.value = [];
@@ -1026,7 +1120,7 @@ export const useSessionStore = defineStore('session', () => {
     // State
     savedSessions,
     currentSession,
-    messages,
+    timeline,
     isConnected,
     isLoading,
     isConnecting,
@@ -1046,7 +1140,8 @@ export const useSessionStore = defineStore('session', () => {
     
     // Computed
     hasActiveSession,
-    messageList,
+    timelineEntries,
+    pendingPermissionEntry,
     toolCallList,
     resumableSessions,
     
@@ -1067,6 +1162,7 @@ export const useSessionStore = defineStore('session', () => {
     setModel,
     clearError,
     tryReconnect,
+    pushNotice,
     
     // Expose client for permission handling
     get acpClient() { return acpClient; },

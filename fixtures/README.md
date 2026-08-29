@@ -19,20 +19,38 @@ A minimal ACP agent that answers `initialize`, `session/new` and
    never arrived, as sent by an agent that reports only terminal state, or seen
    after a mid-stream reconnect.
 4. `agent_message_chunk` — assistant text, arriving *after* the tools.
+5. `session/request_permission` for `call_edit` (*Edit fixtures/README.md*),
+   offering all four ACP option kinds. The turn blocks here until answered.
+6. The `call_edit` `tool_call` — `completed` if the answer allowed it, `failed`
+   otherwise — followed by assistant text naming the option that was chosen.
 
 ### What correct rendering looks like
 
-A **single** Assistant message containing both tool rows and the text:
+Rows in the order the events happened, with the approval answerable in line:
 
 ```
-Assistant
   🔍 Searched docs    ✓
   🔧 Orphan update    ✓
+Assistant
   Found it.
+🔐 Permission required                          ✏️ edit
+Edit fixtures/README.md
+📁 /tmp/mock/fixtures/README.md
+[ Allow once ] [ Allow always ∞ ] [ Deny ] [ Deny always ∞ ] [ Cancel ]
 ```
 
-Two Assistant messages, a missing tool row, or a tool stuck at `in_progress`
-all indicate a regression in `handleSessionUpdate` in `src/stores/session.ts`.
+While that row is unanswered the composer is disabled and an *Approval
+required* bar sits above it; clicking the bar scrolls back to the row.
+Answering flips the row to a decision (`✅ Allow once`) that stays in the
+transcript, and the last two rows arrive.
+
+A missing tool row, a tool stuck at `in_progress`, or an approval that never
+appears indicate a regression in `handleSessionUpdate` in
+`src/stores/session.ts`. Rows that render blank point at the registry in
+`src/components/timeline/registry.ts`.
+
+Switching **Settings → Approvals** to *Blocking dialog* should move the buttons
+into the old modal while the row stays as the record.
 
 ### Desktop (stdio)
 

@@ -17,6 +17,7 @@ import {
 } from '../lib/host';
 import { setDebugForwarding } from '../lib/logger';
 import { setTelemetryEnabled, TELEMETRY_ENABLED_KEY } from '../lib/telemetry';
+import { approvalStyle, setApprovalStyle, type ApprovalStyle } from '../lib/approvals';
 import {
   loadThemePreference,
   setThemePreference,
@@ -463,6 +464,28 @@ async function handleRevealLog(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Approvals
+// ---------------------------------------------------------------------------
+
+const APPROVAL_OPTIONS: { value: ApprovalStyle; label: string }[] = [
+  { value: 'inline', label: 'In the conversation' },
+  { value: 'modal', label: 'Blocking dialog' },
+];
+
+// Seeded from the module's live value, which App.vue loads at startup.
+const approvals = ref<ApprovalStyle>(approvalStyle.value);
+
+async function handleApprovalStyleChange(): Promise<void> {
+  try {
+    await setApprovalStyle(approvals.value);
+  } catch (e) {
+    console.error('Failed to update approval style preference:', e);
+    // Snap back so the control never claims a setting that was not stored.
+    approvals.value = approvalStyle.value;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Privacy / telemetry
 // ---------------------------------------------------------------------------
 
@@ -812,6 +835,34 @@ async function handleTelemetryToggle(): Promise<void> {
           <small>
             System follows your operating system's appearance setting. Light
             and Dark override it for this app only, on this device.
+          </small>
+        </section>
+
+        <section class="config-section">
+          <h3>Approvals</h3>
+          <div class="theme-options" role="radiogroup" aria-label="Approval style">
+            <label
+              v-for="option in APPROVAL_OPTIONS"
+              :key="option.value"
+              class="theme-option"
+            >
+              <input
+                type="radio"
+                name="approval-style"
+                :value="option.value"
+                v-model="approvals"
+                @change="handleApprovalStyleChange"
+              />
+              <span>{{ option.label }}</span>
+            </label>
+          </div>
+          <small>
+            Where an agent's request to run a tool appears. In the conversation
+            puts the request and its buttons in line with the transcript, and
+            leaves a record of what you allowed; the composer is blocked and a
+            banner points back at the request until you answer. The blocking
+            dialog covers the window instead, which is harder to overlook but
+            leaves nothing behind once dismissed.
           </small>
         </section>
 

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch } from 'vue';
-import { renderMarkdown } from '../lib/markdown';
 import { useSessionStore } from '../stores/session';
 import { isMobile } from '../lib/platform';
 import ModePicker from './ModePicker.vue';
 import ModelPicker from './ModelPicker.vue';
 import CommandPalette from './CommandPalette.vue';
+import TimelineList from './timeline/TimelineList.vue';
+import { approvalStyle } from '../lib/approvals';
 import type { SlashCommand } from '../lib/types';
 
 const sessionStore = useSessionStore();
@@ -18,10 +19,7 @@ const commandPaletteRef = ref<InstanceType<typeof CommandPalette> | null>(null);
 // Send button. On desktop, Enter still submits and Shift+Enter newlines.
 const submitOnEnter = !isMobile();
 
-// Track expanded thought sections by message id
-const expandedThoughts = ref<Set<string>>(new Set());
-
-const messages = computed(() => sessionStore.messageList);
+const entries = computed(() => sessionStore.timelineEntries);
 const isLoading = computed(() => sessionStore.isLoading);
 const isReconnecting = computed(() => sessionStore.isReconnecting);
 const currentSession = computed(() => sessionStore.currentSession);
@@ -30,6 +28,29 @@ const currentModeId = computed(() => sessionStore.currentModeId);
 const availableModels = computed(() => sessionStore.availableModels);
 const currentModelId = computed(() => sessionStore.currentModelId);
 const availableCommands = computed(() => sessionStore.availableCommands);
+
+// An approval the user has not answered. While one is outstanding the composer
+// is gated: an inline button, unlike the modal it replaces, can be scrolled
+// past, and nothing should let a prompt be queued behind an unanswered grant.
+const pendingApproval = computed(() => sessionStore.pendingPermissionEntry);
+const awaitingApproval = computed(
+  () => pendingApproval.value !== null && approvalStyle.value === 'inline'
+);
+
+function scrollToApproval() {
+  if (!pendingApproval.value || !messagesContainer.value) return;
+  const el = messagesContainer.value.querySelector('.permission-row.is-pending');
+  (el as HTMLElement | null)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  (el as HTMLElement | null)?.focus({ preventScroll: true });
+}
+
+function handleResolvePermission(optionId: string) {
+  sessionStore.resolvePermission(optionId);
+}
+
+function handleCancelPermission() {
+  sessionStore.cancelPermission();
+}
 
 // Slash command state
 const showCommandPalette = computed(() => {
@@ -47,8 +68,8 @@ const commandFilter = computed(() => {
   return inputText.value.slice(1); // Remove the leading "/"
 });
 
-// Auto-scroll to bottom when new messages arrive
-watch(messages, async () => {
+// Auto-scroll to bottom when the transcript grows
+watch(entries, async () => {
   await nextTick();
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
@@ -57,7 +78,7 @@ watch(messages, async () => {
 
 async function handleSend() {
   const text = inputText.value.trim();
-  if (!text || isLoading.value) return;
+  if (!text || isLoading.value || awaitingApproval.value) return;
   
   inputText.value = '';
   try {
@@ -118,41 +139,6 @@ async function handleModelChange(modelId: string) {
   }
 }
 
-function isThoughtExpanded(messageId: string): boolean {
-  return expandedThoughts.value.has(messageId);
-}
-
-function toggleThought(messageId: string): void {
-  if (expandedThoughts.value.has(messageId)) {
-    expandedThoughts.value.delete(messageId);
-  } else {
-    expandedThoughts.value.add(messageId);
-  }
-}
-
-function getToolIcon(kind: string): string {
-  switch (kind) {
-    case 'read': return '📖';
-    case 'edit': return '✏️';
-    case 'delete': return '🗑️';
-    case 'move': return '📦';
-    case 'search': return '🔍';
-    case 'execute': return '▶️';
-    case 'think': return '💭';
-    case 'fetch': return '🌐';
-    default: return '🔧';
-  }
-}
-
-function getStatusIcon(status: string): string {
-  switch (status) {
-    case 'pending': return '⏳';
-    case 'in_progress': return '⚙️';
-    case 'completed': return '✓';
-    case 'failed': return '✗';
-    default: return '';
-  }
-}
 </script>
 
 <template>
@@ -179,52 +165,12 @@ function getStatusIcon(status: string): string {
     </div>
     
     <div ref="messagesContainer" class="messages-container">
-      <div 
-        v-for="message in messages" 
-        :key="message.id"
-        :class="['message', `message-${message.role}`]"
-      >
-        <div class="message-header">
-          <span class="role">{{ message.role === 'user' ? 'You' : 'Assistant' }}</span>
-        </div>
-        
-        <!-- Agent thinking section (collapsible) - shown first to explain reasoning -->
-        <div v-if="message.thought && message.role === 'assistant'" class="thought-section">
-          <button class="thought-toggle" @click="toggleThought(message.id)">
-            <span class="thought-icon">💭</span>
-            <span class="thought-label">{{ isThoughtExpanded(message.id) ? 'Hide Thinking' : 'Show Thinking' }}</span>
-            <span class="thought-chevron">{{ isThoughtExpanded(message.id) ? '▲' : '▼' }}</span>
-          </button>
-          <div v-if="isThoughtExpanded(message.id)" class="thought-content">
-            <div v-html="renderMarkdown(message.thought)" />
-          </div>
-        </div>
-        
-        <!-- Tool calls for this message (shown after thinking) -->
-        <div v-if="message.toolCalls?.length" class="tool-calls-section">
-          <div 
-            v-for="tc in message.toolCalls" 
-            :key="tc.toolCallId"
-            :class="['tool-call-inline', `tool-${tc.status}`]"
-          >
-            <span class="tool-icon">{{ getToolIcon(tc.kind) }}</span>
-            <span class="tool-name">{{ tc.title }}</span>
-            <span v-if="tc.locations?.length" class="tool-location">
-              {{ tc.locations[0].path }}
-            </span>
-            <span :class="['tool-status', `status-${tc.status}`]">
-              {{ getStatusIcon(tc.status) }}
-            </span>
-          </div>
-        </div>
-        
-        <div 
-          v-if="message.content"
-          class="message-content"
-          v-html="renderMarkdown(message.content)"
-        />
-      </div>
-      
+      <TimelineList
+        :entries="entries"
+        @resolve-permission="handleResolvePermission"
+        @cancel-permission="handleCancelPermission"
+      />
+
       <!-- Loading indicator -->
       <div v-if="isLoading" class="loading-indicator">
         <span class="spinner"></span>
@@ -233,6 +179,16 @@ function getStatusIcon(status: string): string {
       </div>
     </div>
     
+    <!-- The one affordance that keeps an inline approval from being missed:
+         it stays put while the transcript scrolls, and takes you back. -->
+    <button v-if="awaitingApproval" class="approval-bar" @click="scrollToApproval">
+      <span class="approval-bar-icon">🔐</span>
+      <span class="approval-bar-text">
+        Approval required: {{ pendingApproval?.request.toolCall.title }}
+      </span>
+      <span class="approval-bar-action">Review →</span>
+    </button>
+
     <div class="input-container">
       <CommandPalette
         ref="commandPaletteRef"
@@ -245,19 +201,21 @@ function getStatusIcon(status: string): string {
       <textarea
         v-model="inputText"
         :placeholder="
-          isReconnecting
-            ? 'Reconnecting…'
-            : (availableCommands.length > 0
-                ? 'Type your message... (/ for commands)'
-                : 'Type your message...')
+          awaitingApproval
+            ? 'Answer the pending approval to continue…'
+            : (isReconnecting
+                ? 'Reconnecting…'
+                : (availableCommands.length > 0
+                    ? 'Type your message... (/ for commands)'
+                    : 'Type your message...'))
         "
-        :disabled="isLoading || isReconnecting"
+        :disabled="isLoading || isReconnecting || awaitingApproval"
         @keydown="handleKeyDown"
         rows="3"
       />
       <button 
         class="send-btn"
-        :disabled="!inputText.trim() || isLoading || isReconnecting"
+        :disabled="!inputText.trim() || isLoading || isReconnecting || awaitingApproval"
         @click="handleSend"
       >
         Send
@@ -307,131 +265,6 @@ function getStatusIcon(status: string): string {
   padding: 1rem;
 }
 
-.message {
-  margin-bottom: 1rem;
-  padding: 0.75rem;
-  border-radius: 8px;
-}
-
-.message-user {
-  background: var(--bg-user, #e3f2fd);
-  margin-left: 2rem;
-}
-
-.message-assistant {
-  background: var(--bg-assistant, #f5f5f5);
-  margin-right: 2rem;
-}
-
-.message-header {
-  margin-bottom: 0.5rem;
-}
-
-.role {
-  font-weight: 600;
-  font-size: 0.875rem;
-  color: var(--text-secondary, #666);
-}
-
-/* Tool calls inline styles */
-.tool-calls-section {
-  margin-bottom: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.tool-call-inline {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.375rem 0.625rem;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  background: rgba(0, 0, 0, 0.04);
-  border-left: 2px solid var(--border-color);
-}
-
-.tool-pending {
-  border-left-color: #f59e0b;
-}
-
-.tool-in_progress {
-  border-left-color: #3b82f6;
-  background: rgba(59, 130, 246, 0.08);
-}
-
-.tool-completed {
-  border-left-color: #10b981;
-  background: rgba(16, 185, 129, 0.08);
-}
-
-.tool-failed {
-  border-left-color: #ef4444;
-  background: rgba(239, 68, 68, 0.08);
-}
-
-.tool-icon {
-  font-size: 0.875rem;
-}
-
-.tool-name {
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.tool-location {
-  flex: 1;
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tool-status {
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.status-pending { color: #f59e0b; }
-.status-in_progress { color: #3b82f6; }
-.status-completed { color: #10b981; }
-.status-failed { color: #ef4444; }
-
-.message-content {
-  line-height: 1.5;
-  overflow-wrap: break-word;
-  word-wrap: break-word;
-}
-
-.message-content :deep(p) {
-  margin: 0.5rem 0;
-}
-
-.message-content :deep(ol),
-.message-content :deep(ul) {
-  margin: 0.5rem 0;
-  padding-left: 1.5rem;
-}
-
-.message-content :deep(li) {
-  margin: 0.25rem 0;
-}
-
-.message-content :deep(pre) {
-  background: var(--bg-code, #282c34);
-  color: var(--text-code, #abb2bf);
-  padding: 0.75rem;
-  border-radius: 4px;
-  overflow-x: auto;
-}
-
-.message-content :deep(code) {
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 0.9rem;
-}
-
 .loading-indicator {
   display: flex;
   align-items: center;
@@ -461,6 +294,41 @@ function getStatusIcon(status: string): string {
   background: transparent;
   font-size: 0.8rem;
   cursor: pointer;
+}
+
+/* Sticky, full-width and unmissable: the composer's own gate. */
+.approval-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-top: 1px solid #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--text-primary, #333);
+  font-size: 0.85rem;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.approval-bar:hover {
+  background: rgba(245, 158, 11, 0.25);
+}
+
+.approval-bar-text {
+  flex: 1;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.approval-bar-action {
+  color: var(--text-accent, #0066cc);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .input-container {
@@ -552,70 +420,4 @@ textarea:focus {
   }
 }
 
-/* Agent Thinking Section */
-.thought-section {
-  margin-bottom: 0.75rem;
-  border: 1px solid var(--border-color, #e0e0e0);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.thought-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  background: var(--bg-hover, #f5f5f5);
-  border: none;
-  cursor: pointer;
-  font-size: 0.85rem;
-  color: var(--text-muted, #666);
-  text-align: left;
-  transition: background 0.15s ease;
-}
-
-.thought-toggle:hover {
-  background: var(--bg-user, #e3f2fd);
-}
-
-.thought-icon {
-  font-size: 1rem;
-  flex-shrink: 0;
-}
-
-.thought-label {
-  flex: 1;
-  font-weight: 500;
-}
-
-.thought-chevron {
-  font-size: 0.7rem;
-  color: var(--text-muted, #999);
-}
-
-.thought-content {
-  padding: 0.75rem 1rem 0.75rem 1.25rem;
-  background: var(--bg-main, #fafafa);
-  border-top: 1px solid var(--border-color, #e0e0e0);
-  font-size: 0.9rem;
-  color: var(--text-muted, #666);
-  font-style: italic;
-  line-height: 1.5;
-}
-
-.thought-content :deep(p) {
-  margin: 0 0 0.5rem 0;
-}
-
-.thought-content :deep(p:last-child) {
-  margin-bottom: 0;
-}
-
-.thought-content :deep(code) {
-  background: var(--bg-hover, #f0f0f0);
-  padding: 0.125rem 0.25rem;
-  border-radius: 3px;
-  font-size: 0.85em;
-}
 </style>

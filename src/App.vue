@@ -4,6 +4,7 @@ import { canPickFolder, pickFolder, loadKvStore, type KVStore } from './lib/host
 import { useConfigStore } from './stores/config';
 import { useSessionStore } from './stores/session';
 import { initTelemetry, TELEMETRY_ENABLED_KEY } from './lib/telemetry';
+import { approvalStyle, loadApprovalStyle } from './lib/approvals';
 import AgentSelector from './components/AgentSelector.vue';
 import SessionList from './components/SessionList.vue';
 import ChatView from './components/ChatView.vue';
@@ -100,8 +101,11 @@ async function handleManualReconnect() {
   await sessionStore.tryReconnect();
 }
 
-// Watch for permission requests from session store
-const pendingPermission = computed(() => sessionStore.pendingPermission);
+// Approvals normally render as a row inside the transcript (ChatView). The
+// blocking dialog is only mounted for users who asked for it in Settings.
+const pendingPermission = computed(() =>
+  approvalStyle.value === 'modal' ? sessionStore.pendingPermission : null
+);
 
 // Watch for auth method selection requests
 const pendingAuthMethods = computed(() => sessionStore.pendingAuthMethods);
@@ -131,6 +135,10 @@ onMounted(async () => {
   // never visited Settings sends nothing.
   const telemetryEnabled = await prefsStore.get<boolean>(TELEMETRY_ENABLED_KEY) ?? false;
   await initTelemetry(telemetryEnabled);
+
+  // Must settle before the first approval can arrive, or a modal user would
+  // get the inline row for that one request.
+  await loadApprovalStyle();
   
   // Initialize stores
   await configStore.loadConfig();

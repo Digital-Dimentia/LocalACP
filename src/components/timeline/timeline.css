@@ -1,0 +1,64 @@
+/* Styles shared by every timeline row.
+ *
+ * Deliberately global (imported once by TimelineList) rather than duplicated
+ * into each row's scoped block: rows must line up with each other, and a
+ * per-component copy of the spacing rules drifts the moment one row is
+ * tweaked. Class names are `tl-` prefixed to keep them out of the app's way.
+ */
+
+.tl-row {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+}
+
+.tl-row-header {
+  margin-bottom: 0.5rem;
+}
+
+.tl-role {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text-secondary, #666);
+}
+
+.tl-content {
+  line-height: 1.5;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
+.tl-content p {
+  margin: 0.5rem 0;
+}
+
+.tl-content ol,
+.tl-content ul {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.tl-content li {
+  margin: 0.25rem 0;
+}
+
+.tl-content pre {
+  background: var(--bg-code, #282c34);
+  color: var(--text-code, #abb2bf);
+  padding: 0.75rem;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.tl-content code {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.9rem;
+}
+
+/* Monospace path/command text, used by tool-call and approval rows. */
+.tl-path {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted, #666);
+  word-break: break-all;
+}
