@@ -85,15 +85,23 @@ clicked:
 🔧 /demo/echo   Echo text back              ×1
 [ --text "hello world"        ]  [ Re-run ]
 /demo/echo --text "hello world"
+▸ 1 tool call
 ────────────────────────────────────────────
 ● RESULT   new — click to dismiss
 Invoked `/demo/echo` with params: `--text "hello world"`
 ```
 
-A reply that renders as its own Assistant row below instead means the routing
-in `handleSessionUpdate` has come loose. The `tool_call` row the mock also
-emits still lands below the invoke row, after the result — tool calls are
-actions in their own right and keep their own rows.
+The `tool_call` the mock emits is absorbed into the row, not left as a row of
+its own: it is expanded while the run is in flight and folds away once the
+answer arrives. Running an unknown command (`/nope`) is the counter-case —
+the mock reports that call as `failed`, and a failed call stays expanded,
+because a folded failure is a silent one.
+
+A reply that renders as its own Assistant row below, or a tool call that
+lands as a row after the result, means the routing in `handleSessionUpdate`
+has come loose. Tool calls from an ordinary typed prompt (the issue-9
+sequence) still get their own rows — the nesting only applies to a run the
+user started from a tool row.
 
 ### Desktop (stdio)
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import ToolCallLine from '../ToolCallLine.vue';
 import { renderMarkdown } from '../../../lib/markdown';
 import { invocationLine, type ToolInvokeEntry } from '../../../lib/timeline';
 
@@ -20,6 +21,31 @@ const input = ref<HTMLInputElement | null>(null);
 const hasRun = computed(() => props.entry.runCount > 0);
 const isRunning = computed(() => props.entry.state === 'running');
 const hasResult = computed(() => (props.entry.result ?? '').length > 0);
+
+const calls = computed(() => props.entry.toolCalls);
+const failedCount = computed(
+  () => calls.value.filter((c) => c.status === 'failed').length
+);
+
+// Expanded while the run is in flight so progress is visible, then folded away
+// once the answer is in — the actions were the means, the result is the point.
+// Anything that failed stays open: a folded failure is a silent one.
+const callsExpanded = ref(false);
+watch(
+  () => props.entry.state,
+  (state) => {
+    if (state === 'running') callsExpanded.value = true;
+    else if (state === 'answered' && failedCount.value === 0) callsExpanded.value = false;
+  }
+);
+
+const callsSummary = computed(() => {
+  const total = calls.value.length;
+  const noun = total === 1 ? 'tool call' : 'tool calls';
+  return failedCount.value > 0
+    ? `${total} ${noun}, ${failedCount.value} failed`
+    : `${total} ${noun}`;
+});
 // Exactly what Run will send, assembled by the same function the store uses.
 const preview = computed(() => invocationLine(props.entry));
 
@@ -68,6 +94,27 @@ onMounted(() => {
     <!-- What gets sent, spelled out. The row is a line builder, and a builder
          that hides its output is one more thing to second-guess. -->
     <code class="preview">{{ preview }}</code>
+
+    <!-- What the run did, kept with the run that did it. -->
+    <div v-if="calls.length" class="calls">
+      <button
+        class="calls-toggle"
+        :aria-expanded="callsExpanded"
+        @click="callsExpanded = !callsExpanded"
+      >
+        <span class="calls-chevron">{{ callsExpanded ? '▾' : '▸' }}</span>
+        <span :class="['calls-summary', { 'has-failure': failedCount > 0 }]">
+          {{ callsSummary }}
+        </span>
+      </button>
+      <div v-if="callsExpanded" class="calls-list">
+        <ToolCallLine
+          v-for="call in calls"
+          :key="call.toolCallId"
+          :tool-call="call"
+        />
+      </div>
+    </div>
 
     <!-- The answer belongs to the call that asked for it. Clicking the result
          marks it seen; by the time it lands the row may be well above the
@@ -167,6 +214,44 @@ onMounted(() => {
 .run-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.calls {
+  margin-top: 0.5rem;
+}
+
+.calls-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  width: 100%;
+  padding: 0.25rem 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #666);
+  font-family: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.calls-chevron {
+  font-size: 0.65rem;
+}
+
+.calls-summary {
+  font-weight: 500;
+}
+
+.calls-summary.has-failure {
+  color: #ef4444;
+}
+
+.calls-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-top: 0.25rem;
 }
 
 .result {

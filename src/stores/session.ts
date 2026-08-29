@@ -291,10 +291,24 @@ export const useSessionStore = defineStore('session', () => {
     });
   }
 
-  // Appends a tool call as its own row and registers it in the lookup map.
-  // Both hold the same object, so a later `tool_call_update` needs no
-  // write-through to keep the row current.
+  // Files a tool call and registers it in the lookup map. Whichever container
+  // takes it holds the same object the map does, so a later
+  // `tool_call_update` needs no write-through to keep the display current.
+  //
+  // During a run the user started from a tool row, the call is nested in that
+  // row: it is part of what that invocation did. Otherwise it stands as its
+  // own row in the transcript.
   function attachToolCall(toolCall: ToolCallInfo): void {
+    const invoked = activeInvokeId ? findToolInvoke(activeInvokeId) : null;
+    if (invoked) {
+      invoked.toolCalls.push(toolCall);
+      toolCalls.value.set(
+        toolCall.toolCallId,
+        invoked.toolCalls[invoked.toolCalls.length - 1]
+      );
+      return;
+    }
+
     const entry = pushEntry({
       type: 'tool_call' as const,
       id: crypto.randomUUID(),
@@ -1020,6 +1034,7 @@ export const useSessionStore = defineStore('session', () => {
       params: '',
       runCount: 0,
       state: 'draft',
+      toolCalls: [],
       unread: false,
     });
   }
@@ -1049,6 +1064,10 @@ export const useSessionStore = defineStore('session', () => {
     // an unread marker from the last run has been overtaken by events.
     entry.result = '';
     entry.unread = false;
+    // The old run's actions describe the old run. Drop their map entries too,
+    // or a stale `tool_call_update` would mutate a call nothing displays.
+    for (const call of entry.toolCalls) toolCalls.value.delete(call.toolCallId);
+    entry.toolCalls = [];
 
     activeInvokeId = id;
     try {

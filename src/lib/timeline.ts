@@ -96,6 +96,13 @@ export interface ToolInvokeEntry extends TimelineEntryBase {
   /** `running` from Run until the turn ends; `answered` once a reply landed. */
   state: 'draft' | 'running' | 'answered';
   /**
+   * Tool calls the agent made while answering this run, nested here rather
+   * than left as rows of their own. They are what the call *did*, so they
+   * belong to it; loose in the transcript they would sit below the result
+   * they produced, which reads backwards.
+   */
+  toolCalls: ToolCallInfo[];
+  /**
    * The agent's reply to the most recent run, routed here instead of into an
    * assistant row of its own. A call and its answer are one thing; splitting
    * them leaves the answer to be found by scrolling.
