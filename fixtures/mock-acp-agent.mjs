@@ -58,10 +58,50 @@ function makeAgent(send) {
   async function runCommand(text) {
     const [, name, rest = ''] = /^\/(\S+)\s*([\s\S]*)$/.exec(text) ?? [];
     const known = COMMANDS.some((c) => c.name === name);
+    const toolCallId = `call_${name}`;
+
+    // `demo/echo` asks first, which is what puts an approval *inside* a
+    // tool-invocation row: the request names the call listed in that row, so
+    // the two have to end up in one place rather than two.
+    let denied = false;
+    if (name === 'demo/echo') {
+      note({
+        sessionUpdate: 'tool_call',
+        toolCallId,
+        title: `/${name}`,
+        kind: 'execute',
+        status: 'pending',
+      });
+      const answer = await request('session/request_permission', {
+        sessionId: SESSION_ID,
+        toolCall: { toolCallId, title: `/${name}`, kind: 'execute', status: 'pending' },
+        options: [
+          { optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' },
+          { optionId: 'reject-once', name: 'Deny', kind: 'reject_once' },
+        ],
+      });
+      denied = answer?.outcome?.outcome !== 'selected' || answer.outcome.optionId !== 'allow-once';
+      note({
+        sessionUpdate: 'tool_call_update',
+        toolCallId,
+        status: denied ? 'failed' : 'completed',
+      });
+      await sleep(200);
+      note({
+        sessionUpdate: 'agent_message_chunk',
+        content: {
+          type: 'text',
+          text: denied
+            ? `Refused: \`/${name}\` was not permitted.`
+            : `Invoked \`/${name}\` with params: \`${rest || '(none)'}\``,
+        },
+      });
+      return;
+    }
 
     note({
       sessionUpdate: 'tool_call',
-      toolCallId: `call_${name}`,
+      toolCallId,
       title: `/${name}`,
       kind: 'execute',
       status: known ? 'completed' : 'failed',

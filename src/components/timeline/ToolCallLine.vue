@@ -10,7 +10,15 @@
 import { toolKindIcon, toolStatusIcon } from '../../lib/tool-icons';
 import type { ToolCallInfo } from '../../lib/types';
 
-defineProps<{ toolCall: ToolCallInfo }>();
+defineProps<{
+  toolCall: ToolCallInfo;
+  /**
+   * An answered approval for this same call, collapsed onto the line. The
+   * approval named this very call, so as a separate row it said the same
+   * thing twice; as a badge it says the one thing the line did not.
+   */
+  decision?: string;
+}>();
 </script>
 
 <template>
@@ -19,6 +27,12 @@ defineProps<{ toolCall: ToolCallInfo }>();
     <span class="tool-name">{{ toolCall.title }}</span>
     <span v-if="toolCall.locations?.length" class="tl-path tool-location">
       {{ toolCall.locations[0].path }}
+    </span>
+    <span
+      v-if="decision"
+      :class="['decision', `decision-${decision.toLowerCase()}`]"
+    >
+      {{ decision }}
     </span>
     <span :class="['tool-status', `status-${toolCall.status}`]">
       {{ toolStatusIcon(toolCall.status) }}
@@ -68,10 +82,28 @@ defineProps<{ toolCall: ToolCallInfo }>();
 
 .tool-location {
   flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.decision {
+  /* Pushes right whether or not a location is present to absorb the slack. */
+  margin-left: auto;
+  padding: 0.0625rem 0.35rem;
+  border-radius: 3px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.decision-approved { background: var(--bg-success, #28a745); }
+.decision-rejected { background: var(--bg-danger, #dc3545); }
+.decision-cancelled,
+.decision-answered { background: var(--text-muted, #6c757d); }
 
 .tool-status {
   font-size: 0.75rem;

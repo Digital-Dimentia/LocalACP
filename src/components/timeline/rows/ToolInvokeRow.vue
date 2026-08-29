@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import ToolCallLine from '../ToolCallLine.vue';
+import PermissionRow from './PermissionRow.vue';
 import { renderMarkdown } from '../../../lib/markdown';
-import { invocationLine, type ToolInvokeEntry } from '../../../lib/timeline';
+import {
+  invocationLine,
+  permissionOutcomeLabel,
+  type PermissionEntry,
+  type ToolInvokeEntry,
+} from '../../../lib/timeline';
 
 const props = defineProps<{
   entry: ToolInvokeEntry;
@@ -14,6 +20,10 @@ const emit = defineEmits<{
   'update-params': [params: string];
   run: [];
   acknowledge: [];
+  // Forwarded from a nested approval, so the store answers it by the same
+  // path as a free-standing one.
+  resolve: [optionId: string];
+  cancel: [];
 }>();
 
 const input = ref<HTMLInputElement | null>(null);
@@ -23,6 +33,40 @@ const isRunning = computed(() => props.entry.state === 'running');
 const hasResult = computed(() => (props.entry.result ?? '').length > 0);
 
 const calls = computed(() => props.entry.toolCalls);
+
+// An unanswered request is never folded into the collapsible list and never
+// abbreviated: it is the one thing in this row that is waiting on a person.
+const pendingPermissions = computed(() =>
+  props.entry.permissions.filter((p) => p.state === 'pending')
+);
+
+// Answered ones collapse onto the call they gated, keyed by the id both carry.
+const decisions = computed(() => {
+  const byToolCall = new Map<string, string>();
+  for (const permission of props.entry.permissions) {
+    if (permission.state === 'pending' || !permission.toolCallId) continue;
+    byToolCall.set(permission.toolCallId, permissionOutcomeLabel(permission));
+  }
+  return byToolCall;
+});
+
+// An approval whose call never appeared in this run has nothing to collapse
+// onto, so it keeps a line of its own rather than vanishing.
+const orphanDecisions = computed(() =>
+  props.entry.permissions.filter(
+    (p) =>
+      p.state !== 'pending' &&
+      !calls.value.some((c) => c.toolCallId === p.toolCallId)
+  )
+);
+
+function decisionFor(toolCallId: string): string | undefined {
+  return decisions.value.get(toolCallId);
+}
+
+function orphanLabel(permission: PermissionEntry): string {
+  return `${permissionOutcomeLabel(permission)} · ${permission.request.toolCall.title}`;
+}
 const failedCount = computed(
   () => calls.value.filter((c) => c.status === 'failed').length
 );
@@ -112,9 +156,27 @@ onMounted(() => {
           v-for="call in calls"
           :key="call.toolCallId"
           :tool-call="call"
+          :decision="decisionFor(call.toolCallId)"
         />
+        <div
+          v-for="permission in orphanDecisions"
+          :key="permission.id"
+          class="orphan-decision"
+        >
+          🔐 {{ orphanLabel(permission) }}
+        </div>
       </div>
     </div>
+
+    <!-- Outside the collapsible list on purpose: an unanswered approval must
+         not be foldable, and it gates the composer until it is answered. -->
+    <PermissionRow
+      v-for="permission in pendingPermissions"
+      :key="permission.id"
+      :entry="permission"
+      @resolve="emit('resolve', $event)"
+      @cancel="emit('cancel')"
+    />
 
     <!-- The answer belongs to the call that asked for it. Clicking the result
          marks it seen; by the time it lands the row may be well above the
@@ -252,6 +314,21 @@ onMounted(() => {
   flex-direction: column;
   gap: 0.25rem;
   padding-top: 0.25rem;
+}
+
+/* The nested approval keeps its own card, but not the transcript gutter it
+   would use standing on its own. */
+.invoke-row :deep(.permission-row) {
+  margin: 0.625rem 0 0 0;
+}
+
+.orphan-decision {
+  padding: 0.375rem 0.625rem;
+  border-radius: 4px;
+  border-left: 2px solid var(--border-color);
+  background: rgba(0, 0, 0, 0.04);
+  font-size: 0.8rem;
+  color: var(--text-muted, #666);
 }
 
 .result {

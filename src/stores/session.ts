@@ -175,11 +175,7 @@ export const useSessionStore = defineStore('session', () => {
    * the timeline rather than tracked separately so the row and the gate can
    * never disagree about whether something is outstanding.
    */
-  const pendingPermissionEntry = computed(
-    () => timeline.value.find(
-      (e): e is PermissionEntry => e.type === 'permission' && e.state === 'pending'
-    ) ?? null
-  );
+  const pendingPermissionEntry = computed(() => allPermissions().find((p) => p.state === 'pending') ?? null);
   const toolCallList = computed(() => Array.from(toolCalls.value.values()));
   // Only sessions that support resuming (loadSession capability)
   const resumableSessions = computed(() => 
@@ -248,10 +244,8 @@ export const useSessionStore = defineStore('session', () => {
 
   /** Marks every still-open approval as cancelled (transport gone, reset). */
   function abandonPendingPermissions(): void {
-    for (const entry of timeline.value) {
-      if (entry.type === 'permission' && entry.state === 'pending') {
-        entry.state = 'cancelled';
-      }
+    for (const permission of allPermissions()) {
+      if (permission.state === 'pending') permission.state = 'cancelled';
     }
   }
 
@@ -264,6 +258,23 @@ export const useSessionStore = defineStore('session', () => {
     promptsSent = 0;
     // A fresh transcript has nothing outstanding to match an echo against.
     pendingEcho = null;
+  }
+
+  /**
+   * Every approval in the transcript, whether standing as its own row or
+   * nested inside the tool row that provoked it.
+   *
+   * Nesting must never hide a request from the composer gate or the sticky
+   * "Approval required" bar, so everything that asks "is something waiting?"
+   * goes through here rather than scanning the top level.
+   */
+  function allPermissions(): PermissionEntry[] {
+    const found: PermissionEntry[] = [];
+    for (const entry of timeline.value) {
+      if (entry.type === 'permission') found.push(entry);
+      else if (entry.type === 'tool_invoke') found.push(...entry.permissions);
+    }
+    return found;
   }
 
   /** Looks up a tool-invocation row by id, or null if it is not one. */
@@ -1002,19 +1013,25 @@ export const useSessionStore = defineStore('session', () => {
    */
   function appendPermissionRequest(request: PermissionRequest): void {
     const toolCallId = request.toolCall.toolCallId;
-    const duplicate = timeline.value.some(
-      (e) => e.type === 'permission' && e.state === 'pending' && e.toolCallId === toolCallId
+    const duplicate = allPermissions().some(
+      (p) => p.state === 'pending' && p.toolCallId === toolCallId
     );
     if (duplicate) return;
 
-    pushEntry<PermissionEntry>({
+    const permission: PermissionEntry = {
       type: 'permission',
       id: crypto.randomUUID(),
       timestamp: Date.now(),
       toolCallId,
       request,
       state: 'pending',
-    });
+    };
+
+    // An approval raised during a run belongs to that run: it gates a call
+    // already listed in the row, and as a row of its own it repeated it.
+    const invoked = activeInvokeId ? findToolInvoke(activeInvokeId) : null;
+    if (invoked) invoked.permissions.push(permission);
+    else pushEntry(permission);
   }
 
   /**
@@ -1035,6 +1052,7 @@ export const useSessionStore = defineStore('session', () => {
       runCount: 0,
       state: 'draft',
       toolCalls: [],
+      permissions: [],
       unread: false,
     });
   }
@@ -1068,6 +1086,7 @@ export const useSessionStore = defineStore('session', () => {
     // or a stale `tool_call_update` would mutate a call nothing displays.
     for (const call of entry.toolCalls) toolCalls.value.delete(call.toolCallId);
     entry.toolCalls = [];
+    entry.permissions = [];
 
     activeInvokeId = id;
     try {

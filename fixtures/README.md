@@ -97,6 +97,22 @@ answer arrives. Running an unknown command (`/nope`) is the counter-case —
 the mock reports that call as `failed`, and a failed call stays expanded,
 because a folded failure is a silent one.
 
+`demo/echo` also asks for permission before it runs, and that approval belongs
+to the same row. While it is unanswered it renders in full *inside* the row,
+never folded, and the composer stays blocked with the sticky bar pointing at
+it — nesting must not hide a request. Once answered it collapses onto the
+tool-call line it gated:
+
+```
+▾ 1 tool call
+  ⚙️ /demo/echo                    APPROVED  ✓
+```
+
+An approval left as its own row below the tool row, or a composer that
+unblocks while one is unanswered, is a regression in `allPermissions()` in
+`src/stores/session.ts` — everything that asks "is something waiting?" has to
+see nested approvals as well as top-level ones.
+
 A reply that renders as its own Assistant row below, or a tool call that
 lands as a row after the result, means the routing in `handleSessionUpdate`
 has come loose. Tool calls from an ordinary typed prompt (the issue-9

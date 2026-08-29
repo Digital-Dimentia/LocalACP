@@ -103,6 +103,14 @@ export interface ToolInvokeEntry extends TimelineEntryBase {
    */
   toolCalls: ToolCallInfo[];
   /**
+   * Approvals the agent asked for while answering this run. Nested for the
+   * same reason the tool calls are: an approval names the very call sitting
+   * in the list above it, so as a separate row it said the same thing twice.
+   * A *pending* one is still rendered in full and still gates the composer —
+   * folding an unanswered request away is the one thing this must not do.
+   */
+  permissions: PermissionEntry[];
+  /**
    * The agent's reply to the most recent run, routed here instead of into an
    * assistant row of its own. A call and its answer are one thing; splitting
    * them leaves the answer to be found by scrolling.
