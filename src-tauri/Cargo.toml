@@ -44,3 +44,15 @@ parking_lot = "0.12"
 indexmap = { version = "2", features = ["serde"] }
 shell-escape = "0.1"
 
+# macOS only: used to turn off the system text substitutions inside the
+# webview (see `disable_macos_text_substitutions`). Versions match what tauri
+# already pulls in, so this adds no new crates to the lock file.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = [
+  "NSUserDefaults",
+  "NSDictionary",
+  "NSString",
+  "NSValue",
+] }
+

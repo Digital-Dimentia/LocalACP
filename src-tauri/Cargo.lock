@@ -10,6 +10,8 @@ dependencies = [
  "indexmap 2.14.0",
  "log",
  "notify",
+ "objc2",
+ "objc2-foundation",
  "parking_lot",
  "serde",
  "serde_json",

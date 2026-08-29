@@ -359,8 +359,59 @@ fn build_agent_config(
     }
 }
 
+/// Turn off macOS's automatic text substitutions inside the webview.
+///
+/// Every editable field in this app is a WebKit text field, and WebKit honours
+/// the system "smart quotes and dashes" setting. That is right for prose and
+/// wrong for everything this app is actually for: typing `--flag` gets you
+/// `—flag`, `"quoted"` gets you curly quotes, and `...` gets you an ellipsis
+/// character. None of that is visible while typing — the corruption only
+/// shows up once the text has been sent to an agent, a shell, or a remote
+/// service that has no idea what U+2014 means. The same applies to the agent
+/// command lines, arguments and env vars typed in Settings.
+///
+/// WebKit reads these keys from the *app's* standard user defaults and only
+/// falls back to the system-wide `NSSpellChecker` setting when they are
+/// absent (`Source/WebKit/UIProcess/mac/TextCheckerMac.mm`). So writing them
+/// here scopes the change to this app: the user's global "smart quotes and
+/// dashes" preference, and every other app on the machine, is untouched.
+///
+/// `registerDefaults:` rather than `setBool:forKey:` deliberately — it seeds
+/// the registration domain, which persists nothing to disk and still loses to
+/// an explicit value if a user ever sets one by hand.
+///
+/// Spell *checking* is left alone: red squiggles do not alter the text.
+#[cfg(target_os = "macos")]
+fn disable_macos_text_substitutions() {
+    use objc2::runtime::AnyObject;
+    use objc2_foundation::{NSDictionary, NSNumber, NSString, NSUserDefaults};
+
+    let off = NSNumber::new_bool(false);
+    let keys = [
+        NSString::from_str("WebAutomaticDashSubstitutionEnabled"),
+        NSString::from_str("WebAutomaticQuoteSubstitutionEnabled"),
+        NSString::from_str("WebAutomaticTextReplacementEnabled"),
+        // Not a substitution as such, but it rewrites words after the fact,
+        // which mangles identifiers and flag names just as thoroughly.
+        NSString::from_str("WebAutomaticSpellingCorrectionEnabled"),
+    ];
+    let key_refs: Vec<&NSString> = keys.iter().map(|k| &**k).collect();
+    // `registerDefaults:` takes a plain object dictionary, so the shared
+    // `NSNumber` is passed as `AnyObject` once per key.
+    let off_ref: &AnyObject = &off;
+    let values: Vec<&AnyObject> = vec![off_ref; key_refs.len()];
+
+    let defaults = NSDictionary::from_slices(&key_refs, &values);
+    unsafe { NSUserDefaults::standardUserDefaults().registerDefaults(&defaults) };
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before the webview exists, so no field can be created with substitutions
+    // still live.
+    #[cfg(target_os = "macos")]
+    disable_macos_text_substitutions();
+
     let app_state = AppState {
         config_manager: Arc::new(RwLock::new(None)),
         agent_manager: AgentManager::new(),
@@ -422,6 +473,46 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Guards the mechanism, not the intent: that the keys land in a domain
+    /// `objectForKey:` can see, which is how WebKit reads them. A typo in a
+    /// key name or a registration that silently does nothing would leave the
+    /// substitutions on, and the only symptom is corrupted text much later.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn text_substitutions_are_registered_off() {
+        use objc2_foundation::{NSString, NSUserDefaults};
+
+        disable_macos_text_substitutions();
+
+        let defaults = unsafe { NSUserDefaults::standardUserDefaults() };
+
+        // Keeps the assertions below honest: `objectForKey:` must actually
+        // distinguish registered keys from absent ones, or they prove nothing.
+        assert!(
+            unsafe { defaults.objectForKey(&NSString::from_str("WebAutomaticNoSuchSetting")) }
+                .is_none(),
+            "a key nobody registered came back set; this test cannot detect a typo"
+        );
+
+        for key in [
+            "WebAutomaticDashSubstitutionEnabled",
+            "WebAutomaticQuoteSubstitutionEnabled",
+            "WebAutomaticTextReplacementEnabled",
+            "WebAutomaticSpellingCorrectionEnabled",
+        ] {
+            let ns_key = NSString::from_str(key);
+            assert!(
+                unsafe { defaults.objectForKey(&ns_key) }.is_some(),
+                "{key} is not set in any defaults domain; WebKit would fall \
+                 back to the system setting"
+            );
+            assert!(
+                !unsafe { defaults.boolForKey(&ns_key) },
+                "{key} is registered but not false"
+            );
+        }
+    }
 
     fn stdio_input(command: Option<&str>) -> Result<McpServerConfig, String> {
         build_mcp_server_config(
