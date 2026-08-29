@@ -12,7 +12,13 @@
 // else that reads it. An install UUID is resettable: clearing preferences or
 // reinstalling produces a new one, and it says nothing about the machine.
 
-import { ApplicationInsights } from '@microsoft/applicationinsights-web';
+// Type-only: the SDK is ~290 kB minified, more than half of everything else
+// in the bundle put together, and it is dead weight for anyone who has not
+// opted in. A static import would parse and evaluate all of it at every
+// launch, which also makes the promise at the top of this file false. The
+// implementation is pulled in by `import()` inside `startSdk()` instead, so
+// the bytes are a separate chunk that is only ever loaded on opt-in.
+import type { ApplicationInsights } from '@microsoft/applicationinsights-web';
 import { loadKvStore } from './host';
 
 const PREFS_STORE = 'preferences.json';
@@ -64,6 +70,7 @@ async function getOrCreateInstallId(): Promise<string | null> {
 /** Construct and start the SDK. Only ever called when the user has opted in. */
 async function startSdk(): Promise<void> {
   if (appInsights) return;
+  const { ApplicationInsights } = await import('@microsoft/applicationinsights-web');
   const installId = await getOrCreateInstallId();
 
   appInsights = new ApplicationInsights({
