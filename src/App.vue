@@ -25,6 +25,10 @@ const sessionStore = useSessionStore();
 const brandIconOk = ref(true);
 const brandWordmarkOk = ref(true);
 
+// Preference keys, named rather than repeated as literals at each use.
+const LAST_AGENT_KEY = 'lastAgent';
+const LAST_CWD_KEY = 'lastCwd';
+
 const selectedAgent = ref('');
 const selectedCwd = ref('');
 // On mobile / web there is no native folder picker (and the cwd refers to
@@ -139,15 +143,37 @@ onMounted(async () => {
   // Must settle before the first approval can arrive, or a modal user would
   // get the inline row for that one request.
   await loadApprovalStyle();
-  
+
+  // Restored before the config loads, and deliberately so. AgentSelector
+  // falls back to the first agent the instant the list arrives — but only
+  // when nothing is selected — and reports that choice back through
+  // `handleAgentSelect`, which persists it. Restoring afterwards would let
+  // that fallback overwrite the stored preference with the config's first
+  // agent on every launch, so the setting would survive exactly one restart.
+  // Filling the selection first means the fallback simply never fires.
+  const savedAgent = await prefsStore.get<string>(LAST_AGENT_KEY);
+  if (savedAgent) selectedAgent.value = savedAgent;
+
   // Initialize stores
   await configStore.loadConfig();
   await configStore.setupHotReload();
   await sessionStore.initStore();
   
-  const savedCwd = await prefsStore.get<string>('lastCwd');
+  const savedCwd = await prefsStore.get<string>(LAST_CWD_KEY);
   if (savedCwd) {
     selectedCwd.value = savedCwd;
+  }
+
+  // Now that the list exists, check the restored name is still a legal
+  // choice: the agent may have been deleted from the config since, or be a
+  // stdio agent on a build that cannot run one. A name that is not in the
+  // list leaves the dropdown showing nothing, and AgentSelector will not
+  // correct it — its fallback only fills an *empty* selection, and by design
+  // this one is not empty. The stale preference is left on disk rather than
+  // overwritten: an agent that is missing today may be back tomorrow, and
+  // nothing is broken by re-checking it next launch.
+  if (selectedAgent.value && !configStore.agentNames.includes(selectedAgent.value)) {
+    selectedAgent.value = configStore.agentNames[0] ?? '';
   }
 
   // Hook foreground-reconnect listeners. `pageshow` fires both on initial
@@ -164,6 +190,20 @@ onMounted(async () => {
 
 async function handleAgentSelect(agentName: string) {
   selectedAgent.value = agentName;
+  await rememberAgent(agentName);
+}
+
+/** Persists the agent to preselect next launch. */
+async function rememberAgent(agentName: string): Promise<void> {
+  if (!prefsStore || !agentName) return;
+  try {
+    await prefsStore.set(LAST_AGENT_KEY, agentName);
+    await prefsStore.save();
+  } catch (e) {
+    // A preference that will not save is not a reason to fail the action it
+    // was recording.
+    console.warn('Failed to persist last agent:', e);
+  }
 }
 
 async function handleSelectFolder() {
@@ -172,7 +212,7 @@ async function handleSelectFolder() {
     selectedCwd.value = folder;
     // Persist the selection
     if (prefsStore) {
-      await prefsStore.set('lastCwd', folder);
+      await prefsStore.set(LAST_CWD_KEY, folder);
       await prefsStore.save();
     }
   }
@@ -183,7 +223,7 @@ async function handleCwdInput(event: Event) {
   const value = (event.target as HTMLInputElement).value;
   selectedCwd.value = value;
   if (prefsStore) {
-    await prefsStore.set('lastCwd', value);
+    await prefsStore.set(LAST_CWD_KEY, value);
     await prefsStore.save();
   }
 }
@@ -215,6 +255,8 @@ async function handleNewSession() {
 
 async function handleResumeSession(session: SavedSession) {
   selectedAgent.value = session.agentName;
+  // Resuming is running it, so it becomes the agent to come back to.
+  await rememberAgent(session.agentName);
   try {
     await sessionStore.resumeSession(session);
   } catch (e) {
