@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "LocalACP",
   "mainBinaryName": "LocalACP",
-  "version": "0.1.16",
+  "version": "0.2.0",
   "identifier": "formulahendry.acp-ui",
   "build": {
     "beforeDevCommand": "npm run dev",
