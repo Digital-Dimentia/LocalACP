@@ -17,6 +17,23 @@
 const SESSION_ID = 'mock-session-1';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Advertised so the command palette has something in it, and so the
+// tool-invocation row can be exercised. Shapes and names mirror python-acp's
+// `/tools` and `/invokeTool`, including the `a/b` sugar for a single tool.
+const COMMANDS = [
+  { name: 'tools', description: 'List the tools this session can call' },
+  {
+    name: 'invokeTool',
+    description: 'Call one tool by name',
+    input: { hint: '<tool> --param value' },
+  },
+  {
+    name: 'demo/echo',
+    description: 'Echo text back',
+    input: { hint: '--text <text>' },
+  },
+];
+
 function makeAgent(send) {
   const note = (update) =>
     send({ jsonrpc: '2.0', method: 'session/update', params: { sessionId: SESSION_ID, update } });
@@ -33,7 +50,35 @@ function makeAgent(send) {
     });
   }
 
-  // The four beats that made #9 visible, in order.
+  /**
+   * A prompt that starts with `/` is answered as a command invocation: the
+   * mock reports the command and parameters it received, so the tool-call row
+   * can be checked against what actually arrived on the wire.
+   */
+  async function runCommand(text) {
+    const [, name, rest = ''] = /^\/(\S+)\s*([\s\S]*)$/.exec(text) ?? [];
+    const known = COMMANDS.some((c) => c.name === name);
+
+    note({
+      sessionUpdate: 'tool_call',
+      toolCallId: `call_${name}`,
+      title: `/${name}`,
+      kind: 'execute',
+      status: known ? 'completed' : 'failed',
+    });
+    await sleep(200);
+    note({
+      sessionUpdate: 'agent_message_chunk',
+      content: {
+        type: 'text',
+        text: known
+          ? `Invoked \`/${name}\` with params: \`${rest || '(none)'}\``
+          : `No such command: \`/${name}\`. Try: ${COMMANDS.map((c) => '/' + c.name).join(', ')}`,
+      },
+    });
+  }
+
+  // The beats that made #9 visible, in order.
   async function runTurn() {
     // 1. A tool call with nothing before it. The turn has no assistant message
     //    yet, so this is the update that used to be dropped outright.
@@ -131,10 +176,22 @@ function makeAgent(send) {
           agentInfo: { name: 'mock-issue9', version: '0.0.1' },
         });
       case 'session/new':
+        // Commands are a notification, so they can only go out once the reply
+        // to `session/new` has given the client a session to attach them to.
+        setTimeout(
+          () => note({ sessionUpdate: 'available_commands_update', availableCommands: COMMANDS }),
+          0
+        );
         return reply({ sessionId: SESSION_ID });
-      case 'session/prompt':
-        await runTurn();
+      case 'session/prompt': {
+        const text = (params?.prompt ?? [])
+          .filter((b) => b.type === 'text')
+          .map((b) => b.text)
+          .join('');
+        if (text.startsWith('/')) await runCommand(text);
+        else await runTurn();
         return reply({ stopReason: 'end_turn' });
+      }
       case 'authenticate':
         return reply({});
       default:

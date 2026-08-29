@@ -24,6 +24,12 @@ A minimal ACP agent that answers `initialize`, `session/new` and
 6. The `call_edit` `tool_call` — `completed` if the answer allowed it, `failed`
    otherwise — followed by assistant text naming the option that was chosen.
 
+It also advertises three slash commands (`/tools`, `/invokeTool`,
+`/demo/echo`) via `available_commands_update` right after `session/new`, and
+answers any prompt beginning with `/` by reporting the command and parameters
+it received rather than running the sequence above. That is what exercises the
+command palette and the tool-invocation row.
+
 ### What correct rendering looks like
 
 Rows in the order the events happened, with the approval answerable in line:
@@ -51,6 +57,25 @@ appears indicate a regression in `handleSessionUpdate` in
 
 Switching **Settings → Approvals** to *Blocking dialog* should move the buttons
 into the old modal while the row stays as the record.
+
+### Tool invocations
+
+Type `/` in the composer to open the palette, then pick `demo/echo`. Selecting
+it should clear the composer and drop a row into the transcript rather than
+prefilling `/demo/echo ` as text:
+
+```
+🔧 /demo/echo   Echo text back
+[ --text "hello world"        ]  [ Run ]
+/demo/echo --text "hello world"
+```
+
+The parameter line takes focus as the row appears, Enter in it runs the call,
+and the assembled line under the field is exactly what gets sent. After a run
+the row stays put with its parameters intact and the button reads **Re-run**,
+so trying the same call with one argument changed is an edit and a click.
+The mock echoes back the parameters it parsed, which is how you confirm the
+line survived the trip — quotes included.
 
 ### Desktop (stdio)
 

@@ -11,6 +11,7 @@ import UserRow from './rows/UserRow.vue';
 import AssistantRow from './rows/AssistantRow.vue';
 import ToolCallRow from './rows/ToolCallRow.vue';
 import PermissionRow from './rows/PermissionRow.vue';
+import ToolInvokeRow from './rows/ToolInvokeRow.vue';
 import NoticeRow from './rows/NoticeRow.vue';
 
 /**
@@ -22,5 +23,6 @@ export const rowComponents: Record<TimelineEntryType, Component> = {
   assistant: AssistantRow,
   tool_call: ToolCallRow,
   permission: PermissionRow,
+  tool_invoke: ToolInvokeRow,
   notice: NoticeRow,
 };

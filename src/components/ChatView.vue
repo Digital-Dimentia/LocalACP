@@ -107,11 +107,24 @@ function handleKeyDown(event: KeyboardEvent) {
 }
 
 function handleCommandSelect(command: SlashCommand) {
-  // Replace current input with the command
-  if (command.hint) {
-    inputText.value = `/${command.name} `;
-  } else {
-    inputText.value = `/${command.name} `;
+  // A command picked from the palette opens a row in the transcript rather
+  // than prefilling the composer. The row keeps its parameters after it runs,
+  // so trying the same call with one argument changed is an edit and a click
+  // instead of retyping the line.
+  sessionStore.appendToolInvoke(command);
+  // Clears the `/` that opened the palette, which also dismisses it.
+  inputText.value = '';
+}
+
+function handleUpdateInvokeParams(id: string, params: string) {
+  sessionStore.setToolInvokeParams(id, params);
+}
+
+async function handleRunInvoke(id: string) {
+  try {
+    await sessionStore.runToolInvoke(id);
+  } catch (e) {
+    console.error('Failed to run tool invocation:', e);
   }
 }
 
@@ -167,8 +180,11 @@ async function handleModelChange(modelId: string) {
     <div ref="messagesContainer" class="messages-container">
       <TimelineList
         :entries="entries"
+        :can-run="!isLoading && !isReconnecting && !awaitingApproval"
         @resolve-permission="handleResolvePermission"
         @cancel-permission="handleCancelPermission"
+        @update-invoke-params="handleUpdateInvokeParams"
+        @run-invoke="handleRunInvoke"
       />
 
       <!-- Loading indicator -->

@@ -73,6 +73,28 @@ export interface PermissionEntry extends TimelineEntryBase {
   chosenKind?: string;
 }
 
+/**
+ * A tool invocation the user is composing, and can fire more than once.
+ *
+ * Picking a command out of the palette used to prefill the composer with
+ * `/name ` and leave the rest to typing, which made an invocation a one-shot
+ * line of text: to run it again with one argument changed you retyped it.
+ * As a row it is a durable object — the parameters stay editable and Run
+ * stays available, so re-running is a keystroke rather than a reconstruction.
+ */
+export interface ToolInvokeEntry extends TimelineEntryBase {
+  type: 'tool_invoke';
+  /** Command name without the leading slash, e.g. `invokeTool` or `a/echo`. */
+  command: string;
+  /** The agent's own argument hint, shown as the input's placeholder. */
+  hint?: string;
+  description?: string;
+  /** The editable parameter line, verbatim as it will be appended. */
+  params: string;
+  /** How many times this row has been run; 0 until the first Run. */
+  runCount: number;
+}
+
 /** Out-of-band events worth showing in line: dropped connections, warnings. */
 export interface NoticeEntry extends TimelineEntryBase {
   type: 'notice';
@@ -85,6 +107,7 @@ export type TimelineEntry =
   | AssistantEntry
   | ToolCallEntry
   | PermissionEntry
+  | ToolInvokeEntry
   | NoticeEntry;
 
 export type TimelineEntryType = TimelineEntry['type'];
@@ -95,6 +118,21 @@ export function isEntry<T extends TimelineEntryType>(
   type: T
 ): entry is Extract<TimelineEntry, { type: T }> {
   return entry.type === type;
+}
+
+/**
+ * Assemble the prompt a tool-invocation row sends.
+ *
+ * Exported so the shape is testable and stated in exactly one place: the row
+ * displays it, the store sends it, and they must never disagree about what
+ * pressing Run actually does.
+ */
+export function invocationLine(entry: {
+  command: string;
+  params: string;
+}): string {
+  const params = entry.params.trim();
+  return params ? `/${entry.command} ${params}` : `/${entry.command}`;
 }
 
 /**

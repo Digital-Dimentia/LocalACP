@@ -10,7 +10,9 @@ import type {
   NoticeEntry,
   PermissionEntry,
   TimelineEntry,
+  ToolInvokeEntry,
 } from '../lib/timeline';
+import { invocationLine } from '../lib/timeline';
 import { getTransportKind, toWireMcpServers } from '../lib/types';
 import type { McpCapabilities, WireMcpServer } from '../lib/types';
 import { AcpClientBridge, createAcpClient } from '../lib/acp-bridge';
@@ -970,6 +972,47 @@ export const useSessionStore = defineStore('session', () => {
     });
   }
 
+  /**
+   * Opens a tool-invocation row for a command picked out of the palette.
+   *
+   * Nothing is sent here — the row is a draft the user fills in and fires,
+   * possibly more than once.
+   */
+  function appendToolInvoke(command: SlashCommand): ToolInvokeEntry {
+    return pushEntry<ToolInvokeEntry>({
+      type: 'tool_invoke',
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      command: command.name,
+      hint: command.hint,
+      description: command.description,
+      params: '',
+      runCount: 0,
+    });
+  }
+
+  /** Records an edit to a row's parameter line. */
+  function setToolInvokeParams(id: string, params: string): void {
+    const entry = timeline.value.find((e) => e.id === id);
+    if (entry?.type === 'tool_invoke') entry.params = params;
+  }
+
+  /**
+   * Fires a tool-invocation row, as though its assembled line had been typed.
+   *
+   * The row stays where it is with its parameters intact, so the next run is
+   * an edit and a click rather than a retype. `sendPrompt` appends the line as
+   * a user row of its own, which keeps the transcript honest about what was
+   * actually sent.
+   */
+  async function runToolInvoke(id: string): Promise<void> {
+    const entry = timeline.value.find((e) => e.id === id);
+    if (entry?.type !== 'tool_invoke') return;
+    const line = invocationLine(entry);
+    entry.runCount += 1;
+    await sendPrompt(line);
+  }
+
   // Handle permission response
   function resolvePermission(optionId: string): void {
     const entry = pendingPermissionEntry.value;
@@ -1152,6 +1195,9 @@ export const useSessionStore = defineStore('session', () => {
     sendPrompt,
     cancelOperation,
     cancelConnection,
+    appendToolInvoke,
+    setToolInvokeParams,
+    runToolInvoke,
     resolvePermission,
     cancelPermission,
     selectAuthMethod,
