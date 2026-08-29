@@ -13,7 +13,9 @@ import type {
   ToolInvokeEntry,
 } from '../lib/timeline';
 import { invocationLine } from '../lib/timeline';
-import { getTransportKind, toWireMcpServers } from '../lib/types';
+import { initialValues, parseSchema, toInvocationLine } from '../lib/schema-form';
+import type { FormValues } from '../lib/schema-form';
+import { getTransportKind, toolSchemaFromMeta, toWireMcpServers } from '../lib/types';
 import type { McpCapabilities, WireMcpServer } from '../lib/types';
 import { AcpClientBridge, createAcpClient } from '../lib/acp-bridge';
 import { beginEcho, consumeEcho, type PendingEcho } from '../lib/prompt-echo';
@@ -431,6 +433,10 @@ export const useSessionStore = defineStore('session', () => {
             name: cmd.name,
             description: cmd.description,
             hint: cmd.input?.hint ?? undefined,
+            // Carried in `_meta` because ACP's `input` has room for a hint
+            // string and nothing else. An agent that sends none leaves this
+            // undefined and the row keeps its free-text line.
+            inputSchema: toolSchemaFromMeta((cmd as { _meta?: unknown })._meta),
           }));
         }
         break;
@@ -1041,6 +1047,19 @@ export const useSessionStore = defineStore('session', () => {
    * possibly more than once.
    */
   function appendToolInvoke(command: SlashCommand): ToolInvokeEntry {
+    // A schema the form cannot honestly render (`parseSchema` returns the
+    // conditional keywords it found, or null) leaves `form` undefined, and the
+    // row opens on the free-text line exactly as it did before schemas
+    // existed. The fallback is the point: a tool must never become less
+    // reachable because its schema was odd.
+    const form = parseSchema(command.inputSchema) ?? undefined;
+    // A form with no fields is still worth keeping when it names the
+    // conditional keywords that emptied it: the row uses them to say *why* it
+    // is offering a text box, which is the difference between an explanation
+    // and a feature that silently did not happen.
+    const usable = form && form.fields.length > 0 ? form : undefined;
+    const values = usable ? initialValues(usable) : {};
+
     return pushEntry<ToolInvokeEntry>({
       type: 'tool_invoke',
       id: crypto.randomUUID(),
@@ -1048,7 +1067,12 @@ export const useSessionStore = defineStore('session', () => {
       command: command.name,
       hint: command.hint,
       description: command.description,
-      params: '',
+      // Seeded from the schema's own defaults, so a row that opens with
+      // everything already filled in shows the line it would send.
+      params: usable ? paramsOf(toInvocationLine(command.name, usable, values)) : '',
+      form,
+      values,
+      mode: usable ? 'form' : 'raw',
       runCount: 0,
       state: 'draft',
       toolCalls: [],
@@ -1057,10 +1081,40 @@ export const useSessionStore = defineStore('session', () => {
     });
   }
 
+  /**
+   * `toInvocationLine` builds a whole command line; the row stores only the
+   * parameters and puts the name back on in `invocationLine`. Splitting it
+   * here keeps one assembler for what is sent, rather than two that must agree.
+   */
+  function paramsOf(line: string): string {
+    const space = line.indexOf(' ');
+    return space === -1 ? '' : line.slice(space + 1);
+  }
+
   /** Records an edit to a row's parameter line. */
   function setToolInvokeParams(id: string, params: string): void {
     const entry = timeline.value.find((e) => e.id === id);
     if (entry?.type === 'tool_invoke') entry.params = params;
+  }
+
+  /**
+   * Records a form edit, and the line it assembles to.
+   *
+   * Both in one call because they must never be written apart: `params` is
+   * what Run sends, and a values update that failed to reach it would leave
+   * the row displaying one call and sending another.
+   */
+  function setToolInvokeValues(id: string, values: FormValues): void {
+    const entry = findToolInvoke(id);
+    if (!entry?.form) return;
+    entry.values = values;
+    entry.params = paramsOf(toInvocationLine(entry.command, entry.form, values));
+  }
+
+  /** Switches a row between the generated form and the raw line. */
+  function setToolInvokeMode(id: string, mode: 'form' | 'raw'): void {
+    const entry = findToolInvoke(id);
+    if (entry) entry.mode = mode;
   }
 
   /**
@@ -1290,6 +1344,8 @@ export const useSessionStore = defineStore('session', () => {
     cancelConnection,
     appendToolInvoke,
     setToolInvokeParams,
+    setToolInvokeValues,
+    setToolInvokeMode,
     runToolInvoke,
     acknowledgeToolInvoke,
     resolvePermission,

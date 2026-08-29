@@ -24,11 +24,25 @@ A minimal ACP agent that answers `initialize`, `session/new` and
 6. The `call_edit` `tool_call` — `completed` if the answer allowed it, `failed`
    otherwise — followed by assistant text naming the option that was chosen.
 
-It also advertises three slash commands (`/tools`, `/invokeTool`,
-`/demo/echo`) via `available_commands_update` right after `session/new`, and
-answers any prompt beginning with `/` by reporting the command and parameters
-it received rather than running the sequence above. That is what exercises the
-command palette and the tool-invocation row.
+It also advertises five slash commands via `available_commands_update` right
+after `session/new`, and answers any prompt beginning with `/` by reporting the
+command and parameters it received rather than running the sequence above. That
+is what exercises the command palette and the tool-invocation row — and,
+because the reply quotes the parameter line verbatim, it is also how the form's
+serializer can be checked against what actually arrived on the wire.
+
+| Command | What it is for |
+| --- | --- |
+| `/tools`, `/invokeTool` | Built-ins with a hint and no schema — the free-text fallback |
+| `/demo/echo` | Required string, labelled enum, bounded integer, boolean, defaulted string |
+| `/demo/search` | Array of enums (repeated flags), object, untyped property, textarea, `pattern`, and a `dependentRequired` pair |
+| `/demo/deploy` | A conditional (`if`/`then`) schema the form must decline to render |
+
+The per-tool commands carry their JSON Schema in `_meta` under
+`python-acp/tool`, which is the convention described in
+`docs/agent-integration.md`. Between them they reach every control the
+parameter form renders, including the escape hatch: `/demo/deploy` should show
+no form at all, name the conditional keywords, and leave the raw line.
 
 ### What correct rendering looks like
 

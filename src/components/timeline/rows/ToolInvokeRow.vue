@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import ToolCallLine from '../ToolCallLine.vue';
+import ToolParamForm from '../ToolParamForm.vue';
 import PermissionRow from './PermissionRow.vue';
 import { renderMarkdown } from '../../../lib/markdown';
+import {
+  requiredKeys,
+  toInvocationLine,
+  validate,
+  type FormValues,
+} from '../../../lib/schema-form';
 import {
   invocationLine,
   permissionOutcomeLabel,
@@ -18,6 +25,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update-params': [params: string];
+  'update-values': [values: FormValues];
+  'update-mode': [mode: 'form' | 'raw'];
   run: [];
   acknowledge: [];
   // Forwarded from a nested approval, so the store answers it by the same
@@ -27,6 +36,27 @@ const emit = defineEmits<{
 }>();
 
 const input = ref<HTMLInputElement | null>(null);
+
+// A schema with fields is the only thing that earns a form. One that parsed to
+// nothing but a list of conditional keywords still matters — it is why this
+// row is showing a text box — but it has nothing to render.
+const hasForm = computed(() => (props.entry.form?.fields.length ?? 0) > 0);
+const showForm = computed(() => hasForm.value && props.entry.mode === 'form');
+
+// Named so the row can say which keyword defeated it rather than shrugging.
+const unsupported = computed(() => props.entry.form?.unsupported ?? []);
+
+const required = computed(() =>
+  props.entry.form ? requiredKeys(props.entry.form, props.entry.values) : new Set<string>()
+);
+
+// Validation is a courtesy to the user, not a gate the agent relies on: the
+// same call typed by hand into the raw box goes straight through, and the
+// agent checks it on arrival either way.
+const errors = computed(() =>
+  showForm.value && props.entry.form ? validate(props.entry.form, props.entry.values) : {}
+);
+const errorCount = computed(() => Object.keys(errors.value).length);
 
 const hasRun = computed(() => props.entry.runCount > 0);
 const isRunning = computed(() => props.entry.state === 'running');
@@ -117,15 +147,48 @@ const showPreview = computed(
   () => calls.value.length === 0 || preview.value !== props.entry.lastRunLine
 );
 
+const blocked = computed(() => props.canRun === false || errorCount.value > 0);
+
 function submit() {
-  if (props.canRun === false) return;
+  if (blocked.value) return;
   emit('run');
+}
+
+/**
+ * Leaving the form for the raw line is free; coming back is not.
+ *
+ * The form's values are the truth on the way out and the line is regenerated
+ * from them, so a line edited by hand has nowhere to go. Reparsing it would be
+ * guesswork on a format built for a parser in another language — asking is the
+ * honest option, and losing a hand-written line silently is the one outcome
+ * worth preventing.
+ */
+function setMode(mode: 'form' | 'raw') {
+  if (mode === props.entry.mode) return;
+  if (mode === 'form' && props.entry.params !== generatedLine.value) {
+    const ok = window.confirm(
+      'The parameters were edited by hand. Switching back to the form will replace them with what the form holds. Continue?'
+    );
+    if (!ok) return;
+  }
+  emit('update-mode', mode);
+  if (mode === 'form') emit('update-values', { ...props.entry.values });
 }
 
 onMounted(() => {
   // The row is created mid-keystroke, straight out of the command palette, so
   // typing must continue into the parameter line without reaching for it.
   if (!hasRun.value) input.value?.focus();
+});
+
+// The parameters the form's own values assemble to. Compared against
+// `entry.params` this is the only way to know whether the line still came from
+// the form or was since typed over by hand.
+const generatedLine = computed(() => {
+  if (!props.entry.form) return props.entry.params;
+  const line = toInvocationLine(props.entry.command, props.entry.form, props.entry.values);
+  const space = line.indexOf(' ');
+  return space === -1 ? '' : line.slice(space + 1);
 });
 </script>
 
@@ -136,6 +199,27 @@ onMounted(() => {
       <span class="command">/{{ entry.command }}</span>
       <span v-if="entry.description" class="description">{{ entry.description }}</span>
       <span class="header-right">
+        <!-- The escape hatch is always visible, not tucked behind a failure:
+             a schema can describe a call the form cannot express, and finding
+             that out should not mean hunting for the text box. -->
+        <span v-if="hasForm" class="mode-toggle" role="group" aria-label="Parameter editor">
+          <button
+            type="button"
+            :class="['mode-btn', { active: entry.mode === 'form' }]"
+            :aria-pressed="entry.mode === 'form'"
+            @click="setMode('form')"
+          >
+            Form
+          </button>
+          <button
+            type="button"
+            :class="['mode-btn', { active: entry.mode === 'raw' }]"
+            :aria-pressed="entry.mode === 'raw'"
+            @click="setMode('raw')"
+          >
+            Raw
+          </button>
+        </span>
         <span
           v-if="decisionSummary"
           :class="['tl-badge', `tl-badge-${decisionSummary.toLowerCase()}`]"
@@ -148,8 +232,28 @@ onMounted(() => {
       </span>
     </div>
 
+    <!-- Named rather than merely absent. A form that quietly did not appear
+         is indistinguishable from one that was never built. -->
+    <p v-if="unsupported.length" class="unsupported">
+      This tool's schema is conditional ({{ unsupported.join(', ') }}), so its parameters
+      cannot be shown as a form. The line below goes to the agent as typed.
+    </p>
+
+    <div v-if="showForm" class="invoke-form">
+      <ToolParamForm
+        :form="entry.form!"
+        :values="entry.values"
+        :required="required"
+        :errors="errors"
+        :disabled="canRun === false"
+        :autofocus="!hasRun"
+        @update:values="emit('update-values', $event)"
+      />
+    </div>
+
     <div class="invoke-body">
       <input
+        v-if="!showForm"
         ref="input"
         class="params"
         type="text"
@@ -162,7 +266,10 @@ onMounted(() => {
         @input="emit('update-params', ($event.target as HTMLInputElement).value)"
         @keydown.enter.prevent="submit"
       />
-      <button class="run-btn" :disabled="canRun === false" @click="submit">
+      <span v-else class="form-status">
+        {{ errorCount > 0 ? `${errorCount} field(s) need attention` : 'Ready' }}
+      </span>
+      <button class="run-btn" :disabled="blocked" @click="submit">
         {{ hasRun ? 'Re-run' : 'Run' }}
       </button>
     </div>
@@ -171,7 +278,7 @@ onMounted(() => {
          one more thing to second-guess. Once the run has produced calls the
          line rides along on the first of them instead, which is where you are
          already looking and costs no row of its own. -->
-    <code v-if="showPreview" class="preview">{{ preview }}</code>
+    <code v-if="showForm || showPreview" class="preview">{{ preview }}</code>
 
     <!-- What the run did, kept with the run that did it. -->
     <div v-if="calls.length" class="calls">
@@ -280,7 +387,47 @@ onMounted(() => {
 
 .invoke-body {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
+}
+
+.invoke-form {
+  margin-bottom: 0.5rem;
+}
+
+.form-status {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted, #666);
+}
+
+.mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.mode-btn {
+  padding: 0.0625rem 0.4375rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #666);
+  font-family: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.mode-btn.active {
+  background: var(--bg-primary, #0066cc);
+  color: #fff;
+}
+
+.unsupported {
+  margin: 0 0 0.375rem;
+  font-size: 0.75rem;
+  color: var(--text-muted, #666);
 }
 
 .params {

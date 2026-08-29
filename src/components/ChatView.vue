@@ -7,6 +7,7 @@ import ModelPicker from './ModelPicker.vue';
 import CommandPalette from './CommandPalette.vue';
 import TimelineList from './timeline/TimelineList.vue';
 import { approvalStyle } from '../lib/approvals';
+import type { FormValues } from '../lib/schema-form';
 import type { SlashCommand } from '../lib/types';
 
 const sessionStore = useSessionStore();
@@ -120,6 +121,16 @@ function handleUpdateInvokeParams(id: string, params: string) {
   sessionStore.setToolInvokeParams(id, params);
 }
 
+function handleUpdateInvokeValues(id: string, values: FormValues) {
+  // The store writes the values and the line they assemble to together, so
+  // what the row shows and what Run sends cannot come apart.
+  sessionStore.setToolInvokeValues(id, values);
+}
+
+function handleUpdateInvokeMode(id: string, mode: 'form' | 'raw') {
+  sessionStore.setToolInvokeMode(id, mode);
+}
+
 function handleAcknowledgeInvoke(id: string) {
   sessionStore.acknowledgeToolInvoke(id);
 }
@@ -188,6 +199,8 @@ async function handleModelChange(modelId: string) {
         @resolve-permission="handleResolvePermission"
         @cancel-permission="handleCancelPermission"
         @update-invoke-params="handleUpdateInvokeParams"
+        @update-invoke-values="handleUpdateInvokeValues"
+        @update-invoke-mode="handleUpdateInvokeMode"
         @run-invoke="handleRunInvoke"
         @acknowledge-invoke="handleAcknowledgeInvoke"
       />

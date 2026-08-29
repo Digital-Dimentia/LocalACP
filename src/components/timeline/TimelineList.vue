@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { rowComponents } from './registry';
+import type { FormValues } from '../../lib/schema-form';
 import type { TimelineEntry } from '../../lib/timeline';
 
 const props = defineProps<{
@@ -23,6 +24,8 @@ const emit = defineEmits<{
   'resolve-permission': [optionId: string];
   'cancel-permission': [];
   'update-invoke-params': [id: string, params: string];
+  'update-invoke-values': [id: string, values: FormValues];
+  'update-invoke-mode': [id: string, mode: 'form' | 'raw'];
   'run-invoke': [id: string];
   'acknowledge-invoke': [id: string];
 }>();
@@ -37,6 +40,8 @@ const emit = defineEmits<{
     @resolve="emit('resolve-permission', $event)"
     @cancel="emit('cancel-permission')"
     @update-params="emit('update-invoke-params', entry.id, $event)"
+    @update-values="emit('update-invoke-values', entry.id, $event)"
+    @update-mode="emit('update-invoke-mode', entry.id, $event)"
     @run="emit('run-invoke', entry.id)"
     @acknowledge="emit('acknowledge-invoke', entry.id)"
   />

@@ -20,6 +20,26 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Advertised so the command palette has something in it, and so the
 // tool-invocation row can be exercised. Shapes and names mirror python-acp's
 // `/tools` and `/invokeTool`, including the `a/b` sugar for a single tool.
+//
+// The per-tool entries carry their JSON Schema in `_meta`, the way an agent is
+// asked to in docs/agent-integration.md, so the schema-driven parameter form
+// can be developed and exercised without a live agent and real MCP servers
+// behind it. Between them they cover every control the form renders:
+//
+//   demo/echo    required string, enum with labels, integer bounds, boolean,
+//                optional string with a default
+//   demo/search  array of enums (repeated flags), object, untyped property,
+//                a long string that becomes a textarea, a pattern
+//   demo/deploy  a conditional schema, which the form must refuse to render
+//                rather than show half of
+//
+// `_meta` is namespaced because ACP says implementations must not assume
+// anything about values there; an unnamespaced `inputSchema` would be a land
+// grab on a shared dict.
+const schemaMeta = (server, tool, inputSchema) => ({
+  'python-acp/tool': { server, tool, inputSchema },
+});
+
 const COMMANDS = [
   { name: 'tools', description: 'List the tools this session can call' },
   {
@@ -30,7 +50,113 @@ const COMMANDS = [
   {
     name: 'demo/echo',
     description: 'Echo text back',
-    input: { hint: '--text <text>' },
+    input: { hint: '--text <text> [--case <string>] [--times <integer>] [--shout]' },
+    _meta: schemaMeta('demo', 'echo', {
+      type: 'object',
+      required: ['text'],
+      properties: {
+        text: {
+          type: 'string',
+          title: 'Text',
+          description: 'What to echo back.',
+        },
+        case: {
+          type: 'string',
+          title: 'Case',
+          description: 'How to case the reply.',
+          enum: ['upper', 'lower', 'title'],
+          enumNames: ['UPPERCASE', 'lowercase', 'Title Case'],
+          default: 'lower',
+        },
+        times: {
+          type: 'integer',
+          title: 'Times',
+          description: 'How many copies to send back.',
+          minimum: 1,
+          maximum: 10,
+          default: 1,
+        },
+        shout: {
+          type: 'boolean',
+          title: 'Shout',
+          description: 'Append an exclamation mark.',
+        },
+        prefix: {
+          type: 'string',
+          title: 'Prefix',
+          description: 'Put in front of every copy.',
+          default: '> ',
+        },
+      },
+    }),
+  },
+  {
+    name: 'demo/search',
+    description: 'Search things, with the awkward parameter types',
+    input: { hint: '--query <string> [--kind <string>] [--filter <object>]' },
+    _meta: schemaMeta('demo', 'search', {
+      type: 'object',
+      required: ['query'],
+      // `notes` becomes required the moment `filter` is used, which is the one
+      // kind of dependency the form does honour.
+      dependentRequired: { filter: ['notes'] },
+      properties: {
+        query: {
+          type: 'string',
+          title: 'Query',
+          pattern: '^[^*].*',
+          description: 'Must not start with a wildcard.',
+        },
+        kind: {
+          type: 'array',
+          title: 'Kinds',
+          description: 'Repeat to search more than one kind.',
+          items: {
+            type: 'string',
+            // A `oneOf` of consts, which is the schema-blessed way to label
+            // choices — the form reads it as an enum rather than refusing it.
+            oneOf: [
+              { const: 'file', title: 'Files' },
+              { const: 'symbol', title: 'Symbols' },
+              { const: 'commit', title: 'Commits' },
+            ],
+          },
+        },
+        filter: {
+          type: 'object',
+          title: 'Filter',
+          description: 'Arbitrary JSON, passed through as-is.',
+        },
+        notes: {
+          type: 'string',
+          title: 'Notes',
+          description: 'Long enough that a single-line box is the wrong shape.',
+          maxLength: 400,
+        },
+        cursor: {
+          title: 'Cursor',
+          description: 'No declared type, so the honest box is a JSON one.',
+        },
+      },
+    }),
+  },
+  {
+    name: 'demo/deploy',
+    description: 'A conditional schema the form must decline to render',
+    input: { hint: '--target <string> [--host <string>]' },
+    _meta: schemaMeta('demo', 'deploy', {
+      type: 'object',
+      required: ['target'],
+      properties: {
+        target: { type: 'string', enum: ['local', 'remote'] },
+        host: { type: 'string' },
+      },
+      // The point of this fixture: `host` is required only for `remote`, and a
+      // form that rendered the unconditional half would look validated and not
+      // be. The row falls back to the raw line and says why.
+      if: { properties: { target: { const: 'remote' } } },
+      then: { required: ['host'] },
+    }),
   },
 ];
 

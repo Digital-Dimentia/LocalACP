@@ -1,5 +1,7 @@
 // Types for ACP UI application
 
+import type { JsonSchema } from './schema-form';
+
 /**
  * Transport kinds supported by the frontend.
  *
@@ -239,6 +241,44 @@ export interface SlashCommand {
   name: string;
   description: string;
   hint?: string;
+  /**
+   * The tool's own JSON Schema, when the agent carried one across. Turns the
+   * invocation row's free-text parameter line into a real form; absent, the
+   * row falls back to `hint` and behaves exactly as it always has.
+   */
+  inputSchema?: JsonSchema;
+}
+
+/**
+ * Dig a tool's `inputSchema` out of an `AvailableCommand`'s `_meta`.
+ *
+ * ACP's only argument shape is a single free-text hint, so the schema travels
+ * in `_meta` — the protocol's own extensibility point. See
+ * docs/agent-integration.md for the convention this reads.
+ *
+ * Read in two places, namespaced first: an agent that wants to publish schemas
+ * without adopting our namespace should not have to. Anything that is not a
+ * plain object is treated as absent rather than as an error — this is
+ * untrusted input from another process, and a malformed schema must cost the
+ * user a form, never the command itself.
+ */
+export function toolSchemaFromMeta(meta: unknown): JsonSchema | undefined {
+  if (!meta || typeof meta !== 'object') return undefined;
+  const bag = meta as Record<string, unknown>;
+
+  const namespaced = bag['python-acp/tool'];
+  if (namespaced && typeof namespaced === 'object') {
+    const schema = (namespaced as Record<string, unknown>).inputSchema;
+    if (schema && typeof schema === 'object' && !Array.isArray(schema)) {
+      return schema as JsonSchema;
+    }
+  }
+
+  const bare = bag.inputSchema;
+  if (bare && typeof bare === 'object' && !Array.isArray(bare)) {
+    return bare as JsonSchema;
+  }
+  return undefined;
 }
 
 // Models

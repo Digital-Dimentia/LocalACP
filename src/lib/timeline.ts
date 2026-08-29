@@ -13,6 +13,7 @@
 // means adding a variant here and a component to the row registry; nothing in
 // the chat view has to learn about it.
 
+import type { FormValues, SchemaForm } from './schema-form';
 import type { PermissionRequest, ToolCallInfo } from './types';
 
 /** Fields every row carries, whatever its type. */
@@ -91,6 +92,23 @@ export interface ToolInvokeEntry extends TimelineEntryBase {
   description?: string;
   /** The editable parameter line, verbatim as it will be appended. */
   params: string;
+  /**
+   * The tool's schema, parsed into fields, when the agent sent one.
+   *
+   * Its presence is the whole difference between a form and a text box. What
+   * it is *not* is a second way to reach the agent: the form writes its values
+   * back into `params` through `toInvocationLine`, so the line below stays the
+   * one thing that gets sent and the preview keeps being literally true.
+   */
+  form?: SchemaForm;
+  /** Current form values, kept here so the row survives a re-render. */
+  values: FormValues;
+  /**
+   * Which editor is showing. `raw` is always reachable: a schema can describe
+   * a call the form cannot express, and the text box is the escape hatch that
+   * keeps every tool callable.
+   */
+  mode: 'form' | 'raw';
   /** How many times this row has been run; 0 until the first Run. */
   runCount: number;
   /**
