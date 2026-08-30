@@ -543,6 +543,7 @@ function clearError() {
     <!-- Settings -->
     <SettingsView 
       v-if="showSettings"
+      :selected-agent="selectedAgent"
       @close="showSettings = false"
     />
   </div>

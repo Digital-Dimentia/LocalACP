@@ -1,0 +1,333 @@
+/* Styles shared by the three Settings columns.
+ *
+ * Global rather than scoped: SettingsView, SettingsPreferences,
+ * SettingsAgents and SettingsMcp all render the same form controls, list rows
+ * and read-only field grids, and duplicating ~200 lines of scoped CSS into
+ * each one is how they drift apart. Every class here is `st-` prefixed so it
+ * cannot collide with the app-wide styles in App.vue. */
+
+/* --- layout ------------------------------------------------------------- */
+
+.st-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.st-panel {
+  background: var(--bg-main);
+  border-radius: 8px;
+  width: 95%;
+  max-width: 1100px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.st-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.st-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.st-close {
+  border: none;
+  background: transparent;
+  font-size: 1.25rem;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 0.25rem;
+}
+
+.st-close:hover {
+  color: var(--text-primary);
+}
+
+.st-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 15rem) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  padding: 1.25rem;
+  overflow-y: auto;
+  align-items: start;
+}
+
+.st-column {
+  min-width: 0;
+}
+
+.st-column + .st-column {
+  border-left: 1px solid var(--border-color);
+  padding-left: 1.25rem;
+}
+
+/* Below this the three columns are too cramped to read; stack them and swap
+   the dividers from vertical to horizontal. */
+@media (max-width: 900px) {
+  .st-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .st-column + .st-column {
+    border-left: none;
+    padding-left: 0;
+    border-top: 1px solid var(--border-color);
+    padding-top: 1.25rem;
+  }
+}
+
+.st-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.st-column-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+/* --- preference sections ------------------------------------------------ */
+
+.st-pref {
+  margin-bottom: 1.1rem;
+}
+
+.st-pref-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.st-radios {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.st-check,
+.st-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.st-check input,
+.st-radio input {
+  cursor: pointer;
+  margin: 0;
+}
+
+.st-path {
+  font-family: monospace;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  background: var(--bg-sidebar);
+  padding: 0.4rem 0.5rem;
+  border-radius: 4px;
+  word-break: break-all;
+  margin: 0 0 0.4rem;
+}
+
+.st-error {
+  margin: 0.4rem 0;
+  color: var(--bg-danger);
+  font-size: 0.8rem;
+}
+
+/* --- buttons ------------------------------------------------------------ */
+
+.st-btn {
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.st-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.st-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.st-btn-primary {
+  padding: 0.4rem 0.9rem;
+  background: var(--bg-primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.st-btn-primary:hover:not(:disabled) {
+  background: var(--bg-primary-hover);
+}
+
+.st-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.st-btn-danger {
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--bg-danger);
+  color: var(--bg-danger);
+}
+
+.st-btn-danger:hover:not(:disabled) {
+  background: var(--bg-danger);
+  color: white;
+}
+
+.st-btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.st-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+/* --- forms -------------------------------------------------------------- */
+
+.st-field {
+  margin-bottom: 0.7rem;
+}
+
+.st-field label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-bottom: 0.2rem;
+}
+
+.st-field input[type='text'],
+.st-field select,
+.st-select {
+  width: 100%;
+  padding: 0.45rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  background: var(--bg-main);
+  color: var(--text-primary);
+}
+
+.st-field input[type='text']:focus,
+.st-field select:focus,
+.st-select:focus {
+  outline: none;
+  border-color: var(--bg-primary);
+}
+
+.st-hint {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+/* --- read-only config view ---------------------------------------------- */
+
+.st-readonly {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.35rem 0.75rem;
+  font-size: 0.82rem;
+  align-items: baseline;
+  margin: 0;
+}
+
+.st-readonly dt {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.st-readonly dd {
+  margin: 0;
+  min-width: 0;
+  word-break: break-word;
+  color: var(--text-primary);
+}
+
+.st-readonly dd code {
+  font-family: monospace;
+  background: var(--bg-sidebar);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  word-break: break-all;
+}
+
+.st-empty {
+  padding: 1.5rem 0.5rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* --- badges ------------------------------------------------------------- */
+
+.st-badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  border: 1px solid transparent;
+  /* Default (stdio) — emerald to convey "local process". */
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.st-badge[data-kind='websocket'],
+.st-badge[data-kind='http'],
+.st-badge[data-kind='sse'] {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #bae6fd;
+}
+
+.st-badge[data-kind='off'] {
+  background: var(--bg-sidebar);
+  color: var(--text-muted);
+  border-color: var(--border-color);
+}
