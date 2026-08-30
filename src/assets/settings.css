@@ -124,6 +124,14 @@
   gap: 0.3rem;
 }
 
+/* For short, scannable options (System / Light / Dark) a row reads better and
+   costs three lines less height. Wraps rather than overflowing the column. */
+.st-radios-inline {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
+}
+
 .st-check,
 .st-radio {
   display: flex;

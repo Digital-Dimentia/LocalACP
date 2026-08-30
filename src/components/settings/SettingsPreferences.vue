@@ -149,7 +149,7 @@ onMounted(async () => {
           Dark override it for this app only, on this device.
         </InfoPopover>
       </h4>
-      <div class="st-radios" role="radiogroup" aria-label="Theme">
+      <div class="st-radios st-radios-inline" role="radiogroup" aria-label="Theme">
         <label v-for="option in THEME_OPTIONS" :key="option.value" class="st-radio">
           <input
             type="radio"

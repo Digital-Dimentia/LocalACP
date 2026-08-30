@@ -90,6 +90,9 @@ onBeforeUnmount(() => {
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
+  /* This lives inside a small-caps section title; don't inherit its casing. */
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .info-trigger:hover,
@@ -116,6 +119,11 @@ onBeforeUnmount(() => {
   line-height: 1.45;
   color: var(--text-secondary);
   white-space: normal;
+  /* Same reason as the trigger: a paragraph of body copy rendered in the
+     title's uppercase + letter-spacing is close to unreadable. */
+  text-transform: none;
+  letter-spacing: normal;
+  text-align: left;
 }
 
 .info-bubble :deep(code) {
