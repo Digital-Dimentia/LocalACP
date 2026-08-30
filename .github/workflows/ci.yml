@@ -59,6 +59,11 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # Before the type check and the build: a failing unit test is a more
+      # specific answer than a failing build, and it arrives sooner.
+      - name: Test
+        run: npm test
+
       - name: Type check
         run: npm run build
 

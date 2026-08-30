@@ -1,4 +1,10 @@
-import { defineConfig, type Plugin } from "vite";
+import type { Plugin } from "vite";
+// `vitest/config` re-exports Vite's own `defineConfig` with the `test` key
+// typed. Importing it here rather than keeping a second config file means the
+// tests build the app exactly the way the app builds -- same plugins, same
+// aliases, same `define` values -- so a test can never pass against a module
+// graph the real build does not have.
+import { defineConfig } from "vitest/config";
 import vue from "@vitejs/plugin-vue";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -213,10 +219,27 @@ function brandingHtmlPlugin(brand: Branding): Plugin {
 export default defineConfig(async ({ mode }) => {
   const isWeb = mode === "web";
 
-  if (!isWeb) assertNativeBrandingApplied(branding);
+  // Native branding is a *packaging* invariant, and a unit test has no bundle
+  // to get it wrong in. Checking it here would make `npm test` fail on a
+  // half-finished rebrand, which tells the developer nothing about the code
+  // they just changed.
+  // @ts-expect-error process is a nodejs global
+  const isTest = Boolean(process.env.VITEST);
+  if (!isWeb && !isTest) assertNativeBrandingApplied(branding);
 
   return {
     plugins: [vue(), brandingHtmlPlugin(branding)],
+
+    test: {
+      // `describe`/`it`/`expect` without an import in every file, matching the
+      // convention the rest of the JS ecosystem assumes.
+      globals: true,
+      // The app is a webview UI: components need a DOM, and `happy-dom` is
+      // enough of one without the weight of a full browser.
+      environment: "happy-dom",
+      setupFiles: ["./src/test-setup.ts"],
+      include: ["src/**/*.test.ts"],
+    },
 
     define: {
       // Exposed to the frontend as `import.meta.env.VITE_APP_VERSION`. The
