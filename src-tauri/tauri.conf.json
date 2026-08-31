@@ -3,7 +3,7 @@
   "productName": "LocalACP",
   "mainBinaryName": "LocalACP",
   "version": "0.2.0",
-  "identifier": "formulahendry.acp-ui",
+  "identifier": "com.digitaldimentia.localacp",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
