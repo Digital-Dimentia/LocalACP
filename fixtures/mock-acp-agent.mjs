@@ -3,7 +3,7 @@
 // message or thought chunk first — the sequence reported in
 // https://github.com/formulahendry/acp-ui/issues/9.
 //
-// ACP allows `tool_call` as a standalone update, but ACP UI used to attach one
+// ACP allows `tool_call` as a standalone update, but LocalACP used to attach one
 // only when an assistant message already existed, so these calls rendered as
 // nothing at all. This fixture reproduces that sequence on demand; see
 // fixtures/README.md for how to point a build at it.
@@ -397,7 +397,7 @@ if (wsIdx === -1) {
     ({ WebSocketServer } = await import('ws'));
   } catch {
     process.stderr.write(
-      'mock agent: --ws needs the `ws` package, which acp-ui does not depend on.\n' +
+      'mock agent: --ws needs the `ws` package, which LocalACP does not depend on.\n' +
         'Install it somewhere on NODE_PATH (e.g. `npm i --no-save ws`) or use stdio mode.\n'
     );
     process.exit(1);

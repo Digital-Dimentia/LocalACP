@@ -7,7 +7,29 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const DEFAULT_BRAND_NAME = 'ACP UI';
+const DEFAULT_BRAND_NAME = 'LocalACP';
+
+/**
+ * Read a per-build branding override.
+ *
+ * The variables were named `ACP_UI_BRAND_*` before the product was renamed to
+ * LocalACP. The old spellings are still honoured -- someone's build script or
+ * CI job is holding them -- but they warn, so the deprecation is visible in
+ * build logs rather than only in a changelog. The new name always wins when
+ * both are set.
+ */
+export function brandEnv(suffix) {
+  const current = process.env[`LOCALACP_BRAND_${suffix}`];
+  if (current !== undefined) return current;
+  const legacy = process.env[`ACP_UI_BRAND_${suffix}`];
+  if (legacy !== undefined) {
+    console.warn(
+      `ACP_UI_BRAND_${suffix} is deprecated and will be removed; ` +
+        `use LOCALACP_BRAND_${suffix} instead.`
+    );
+  }
+  return legacy;
+}
 
 /** Longest name the sidebar header renders without ellipsing. */
 export const MAX_BRAND_NAME_LENGTH = 64;
@@ -32,11 +54,12 @@ export function readBrandingFile() {
 }
 
 /**
- * The product name: `$ACP_UI_BRAND_NAME`, else `branding.json`, else the
- * default. Throws rather than falling back on anything malformed.
+ * The product name: `$LOCALACP_BRAND_NAME` (or its deprecated
+ * `$ACP_UI_BRAND_NAME` alias), else `branding.json`, else the default. Throws
+ * rather than falling back on anything malformed.
  */
 export function brandName(file = readBrandingFile()) {
-  const raw = process.env.ACP_UI_BRAND_NAME ?? file.name ?? DEFAULT_BRAND_NAME;
+  const raw = brandEnv('NAME') ?? file.name ?? DEFAULT_BRAND_NAME;
   if (typeof raw !== 'string') {
     throw new Error(`branding name must be a string, got ${typeof raw}.`);
   }

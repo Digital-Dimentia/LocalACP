@@ -85,6 +85,5 @@ moment B unblocks.
 |---|---|
 | **Rust port of python-acp** | After the current external commitment. Deserves a real module-by-module sizing then, not a guess. |
 | **Notarization + Developer ID** | First non-technical macOS user. |
-| **Config dir rename** (`acp-ui` → LocalACP) | Needs a read-old/write-new migration; its own task, not part of the graft. |
 | **Windows Authenticode cert** | If onedir does not quell AV false positives. |
 | **Upstream PRs for the security fixes** | Out of scope. Separate conversation already in progress. |

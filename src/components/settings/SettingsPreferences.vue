@@ -193,7 +193,7 @@ onMounted(async () => {
       <h4 class="st-pref-title">
         Privacy
         <InfoPopover label="Privacy">
-          Off by default. When on, ACP UI reports app launches, agent names, and
+          Off by default. When on, LocalACP reports app launches, agent names, and
           session events (created, resumed, prompt sent, disconnected) plus
           error reports to Azure Application Insights, tagged with a random
           install ID. Prompt text, agent output, and file contents are never

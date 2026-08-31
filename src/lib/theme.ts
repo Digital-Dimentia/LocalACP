@@ -14,9 +14,11 @@
 // An inline bootstrap script in `index.html` would be the other way to do it,
 // but the CSP is `script-src 'self'` and inline script is (correctly) refused.
 
+import { readMigrated, STORAGE_PREFIX } from './legacy-storage';
+
 export type ThemePreference = 'system' | 'light' | 'dark';
 
-const STORAGE_KEY = 'acp-ui:theme';
+const STORAGE_KEY = `${STORAGE_PREFIX}:theme`;
 
 function isThemePreference(v: unknown): v is ThemePreference {
   return v === 'system' || v === 'light' || v === 'dark';
@@ -24,15 +26,10 @@ function isThemePreference(v: unknown): v is ThemePreference {
 
 /** Read the stored preference, defaulting to following the OS. */
 export function loadThemePreference(): ThemePreference {
-  if (typeof localStorage === 'undefined') return 'system';
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return isThemePreference(raw) ? raw : 'system';
-  } catch (e) {
-    // Private mode and similar can throw on access rather than return null.
-    console.warn('Failed to read the theme preference:', e);
-    return 'system';
-  }
+  // `readMigrated` promotes the pre-rename `acp-ui:theme` key and already
+  // absorbs the throws that private mode and blocked site data produce.
+  const raw = readMigrated(STORAGE_KEY);
+  return isThemePreference(raw) ? raw : 'system';
 }
 
 /** Reflect a preference into the DOM. Safe to call before Vue mounts. */

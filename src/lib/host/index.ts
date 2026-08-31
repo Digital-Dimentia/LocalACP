@@ -23,6 +23,7 @@ import type {
 import { getTransportKind } from '../types';
 import type { McpTransportKind } from '../types';
 import { isTauriHost, isDesktop } from '../platform';
+import { readMigrated, STORAGE_PREFIX } from '../legacy-storage';
 
 export type Unlisten = () => void;
 
@@ -39,12 +40,12 @@ export interface RemoteAgentOptions {
 // mutate it (the Tauri implementation watches a real file).
 // ---------------------------------------------------------------------------
 
-const WEB_CONFIG_KEY = 'acp-ui:agents';
+const WEB_CONFIG_KEY = `${STORAGE_PREFIX}:agents`;
 const WEB_CONFIG_PATH_LABEL = '(browser local storage)';
 
 function loadWebConfig(): AgentsConfig {
-  if (typeof localStorage === 'undefined') return { agents: {} };
-  const raw = localStorage.getItem(WEB_CONFIG_KEY);
+  // Promotes the pre-rename `acp-ui:agents` key on first read.
+  const raw = readMigrated(WEB_CONFIG_KEY);
   if (!raw) return { agents: {} };
   try {
     const parsed = JSON.parse(raw);

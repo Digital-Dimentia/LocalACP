@@ -9,7 +9,7 @@ import vue from "@vitejs/plugin-vue";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { extname, relative, resolve, sep } from "node:path";
-import { binaryName, brandName, readBrandingFile } from "./scripts/branding-name.mjs";
+import { binaryName, brandEnv, brandName, readBrandingFile } from "./scripts/branding-name.mjs";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
@@ -106,9 +106,6 @@ function inlineImage(field: string, iconPath: string): string {
 }
 
 function loadBranding(): Branding {
-  // @ts-expect-error process is a nodejs global
-  const env = process.env as Record<string, string | undefined>;
-
   // The name is resolved by `scripts/branding-name.mjs` rather than here,
   // because `scripts/apply-branding.mjs` needs the identical answer when it
   // writes the name into `tauri.conf.json` and `Cargo.toml` -- files this
@@ -128,10 +125,10 @@ function loadBranding(): Branding {
   // the name rendered as text respectively.
   return {
     name,
-    icon: inlineField("icon", env.ACP_UI_BRAND_ICON ?? file.icon ?? ""),
+    icon: inlineField("icon", brandEnv("ICON") ?? file.icon ?? ""),
     wordmark: inlineField(
       "wordmark",
-      env.ACP_UI_BRAND_WORDMARK ?? file.wordmark ?? ""
+      brandEnv("WORDMARK") ?? file.wordmark ?? ""
     ),
   };
 }
@@ -148,7 +145,7 @@ const branding = loadBranding();
  * `beforeBuildCommand`, and the binary name lives in `Cargo.toml`. So they are
  * written ahead of time by `npm run brand:apply` and committed, and checked
  * here so a rebrand that forgets that step fails loudly instead of shipping an
- * app whose menu bar still says "acp-ui".
+ * app whose menu bar still says "localacp".
  *
  * Web builds skip the check: nothing native is involved.
  */
@@ -195,14 +192,14 @@ function assertNativeBrandingApplied(brand: Branding): void {
  * Rewrite the branded strings baked into `index.html`.
  *
  * The document title has to be right in the served HTML rather than patched
- * from script on mount, or a rebranded build flashes "ACP UI" in the window
+ * from script on mount, or a rebranded build flashes "LocalACP" in the window
  * chrome and the browser tab before Vue boots.
  */
 function brandingHtmlPlugin(brand: Branding): Plugin {
   const escape = (s: string) =>
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   return {
-    name: "acp-ui:branding-html",
+    name: "localacp:branding-html",
     transformIndexHtml(html) {
       const name = escape(brand.name);
       return html

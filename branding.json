@@ -1,5 +1,5 @@
 {
-  "$comment": "White-label branding, applied at build time. Edit and rebuild to rebrand. Fields can be overridden per-build with ACP_UI_BRAND_NAME / ACP_UI_BRAND_ICON / ACP_UI_BRAND_WORDMARK. Paths are relative to this repo root and must stay inside it: they are inlined into the bundle as data URIs, so remote URLs are rejected by design (see README, White-label branding).",
+  "$comment": "White-label branding, applied at build time. Edit and rebuild to rebrand. Fields can be overridden per-build with LOCALACP_BRAND_NAME / LOCALACP_BRAND_ICON / LOCALACP_BRAND_WORDMARK (the older ACP_UI_BRAND_* spellings still work but warn). Paths are relative to this repo root and must stay inside it: they are inlined into the bundle as data URIs, so remote URLs are rejected by design (see README, White-label branding).",
   "name": "LocalACP",
   "icon": "assets/brand/localacp-mark.png",
   "wordmark": "assets/brand/localacp-wordmark.png"

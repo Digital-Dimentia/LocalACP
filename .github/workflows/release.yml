@@ -148,11 +148,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: v${{ needs.update-version.outputs.version || needs.get-version.outputs.version || inputs.version }}
-          releaseName: 'ACP UI v${{ needs.update-version.outputs.version || needs.get-version.outputs.version || inputs.version }}'
+          releaseName: 'LocalACP v${{ needs.update-version.outputs.version || needs.get-version.outputs.version || inputs.version }}'
           releaseBody: |
             ## What's New
             
-            See the assets below to download ACP UI for your platform.
+            See the assets below to download LocalACP for your platform.
             
             ### Downloads
             - **Windows**: `.msi` (installer) or `.exe` (NSIS)

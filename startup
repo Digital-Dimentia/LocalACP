@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch the acp-ui desktop app from this working tree, so you can see the code
+# Launch the LocalACP desktop app from this working tree, so you can see the code
 # as it currently stands running in a real window.
 #
 #   ./startup            # dev build with HMR (Vue reloads on save; Rust changes rebuild)

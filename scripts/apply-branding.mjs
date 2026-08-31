@@ -22,7 +22,7 @@
 //                      CFBundleName once the app is bundled.
 //   [[bin]] name    -> the executable's filename. Under `tauri dev` there is no
 //                      .app, so localizedName falls back to this. Without it the
-//                      whole application menu reads "acp-ui" during development.
+//                      whole application menu reads "localacp" during development.
 //   mainBinaryName  -> tells `tauri build` which cargo output to bundle, now
 //                      that the binary is no longer named after the package.
 //

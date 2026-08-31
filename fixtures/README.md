@@ -150,16 +150,16 @@ user started from a tool row.
 `npm run start:mock` registers the agent for you and starts the dev build; add
 `-- --setup` to only write the config. It merges into whatever agents you
 already have and backs the file up first. To do it by hand instead, add it to
-your agent config — `~/.config/acp-ui/agents.json` on Linux,
-`~/Library/Application Support/acp-ui/agents.json` on macOS,
-`%APPDATA%\acp-ui\agents.json` on Windows — using an absolute path:
+your agent config — `~/.config/LocalACP/agents.json` on Linux,
+`~/Library/Application Support/LocalACP/agents.json` on macOS,
+`%APPDATA%\LocalACP\agents.json` on Windows — using an absolute path:
 
 ```json
 {
   "agents": {
     "mock-issue9": {
       "command": "node",
-      "args": ["/absolute/path/to/acp-ui/fixtures/mock-acp-agent.mjs"]
+      "args": ["/absolute/path/to/LocalACP/fixtures/mock-acp-agent.mjs"]
     }
   }
 }

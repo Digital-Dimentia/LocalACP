@@ -59,6 +59,9 @@
           "path": "$HOME/Library/Keychains/**"
         },
         {
+          "path": "$CONFIG/LocalACP/**"
+        },
+        {
           "path": "$CONFIG/acp-ui/**"
         },
         {
@@ -106,6 +109,9 @@
         },
         {
           "path": "$HOME/Library/Keychains/**"
+        },
+        {
+          "path": "$CONFIG/LocalACP/**"
         },
         {
           "path": "$CONFIG/acp-ui/**"

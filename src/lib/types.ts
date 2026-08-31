@@ -1,4 +1,4 @@
-// Types for ACP UI application
+// Types for the LocalACP application
 
 import type { JsonSchema } from './schema-form';
 

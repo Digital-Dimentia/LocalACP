@@ -62,7 +62,7 @@ function collectMcpServers(
  * ACP lets the agent answer with a different version than the client asked
  * for — the client's version if it's supported, otherwise the newest the
  * agent speaks — and requires the client to disconnect when it can't speak
- * the result. acp-ui implements exactly {@link PROTOCOL_VERSION}, so any
+ * the result. LocalACP implements exactly {@link PROTOCOL_VERSION}, so any
  * other number is an incompatibility.
  *
  * Failing here, at the handshake, is the whole point: without this the
@@ -80,8 +80,8 @@ function assertNegotiatedProtocolVersion(negotiated: number | undefined, agentNa
   }
   if (negotiated !== PROTOCOL_VERSION) {
     throw new Error(
-      `Agent '${agentName}' negotiated ACP protocol v${negotiated}, but acp-ui speaks v${PROTOCOL_VERSION}. ` +
-        `Update acp-ui if the agent is newer, or the agent if it is older.`
+      `Agent '${agentName}' negotiated ACP protocol v${negotiated}, but LocalACP speaks v${PROTOCOL_VERSION}. ` +
+        `Update LocalACP if the agent is newer, or the agent if it is older.`
     );
   }
 }
@@ -602,8 +602,8 @@ export const useSessionStore = defineStore('session', () => {
           },
         },
         clientInfo: {
-          name: 'acp-ui',
-          title: 'ACP UI',
+          name: 'localacp',
+          title: 'LocalACP',
           version: appVersion,
         },
       });
@@ -816,8 +816,8 @@ export const useSessionStore = defineStore('session', () => {
           },
         },
         clientInfo: {
-          name: 'acp-ui',
-          title: 'ACP UI',
+          name: 'localacp',
+          title: 'LocalACP',
           version: appVersion,
         },
       });

@@ -1,7 +1,7 @@
 // White-label branding, resolved at build time.
 //
 // `vite.config.ts` reads `branding.json` (overridable per-build with the
-// ACP_UI_BRAND_NAME / ACP_UI_BRAND_ICON environment variables), validates it
+// LOCALACP_BRAND_NAME / LOCALACP_BRAND_ICON environment variables), validates it
 // and injects the result through `define`. Nothing here reads a file or a
 // network resource at runtime: the icon arrives as a `data:` URI already
 // embedded in the bundle, which is why the webview CSP needs no `asset://`
@@ -15,7 +15,7 @@ import { isTauriHost } from './platform';
 
 /** The product name shown in the sidebar header, welcome pane and title bar. */
 export const brandName: string =
-  import.meta.env.VITE_BRAND_NAME || 'ACP UI';
+  import.meta.env.VITE_BRAND_NAME || 'LocalACP';
 
 /**
  * `data:` URI for the brand icon, or `''` when the build set no icon.

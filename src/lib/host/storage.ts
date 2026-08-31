@@ -1,13 +1,14 @@
 // Minimal KV-store shim with two backends:
 //  - on Tauri, defers to `@tauri-apps/plugin-store` so behaviour matches
 //    today's persistence (keyed JSON file in the app's data dir);
-//  - on web, uses `localStorage` under a single `acp-ui:<name>` namespace.
+//  - on web, uses `localStorage` under a single `localacp:<name>` namespace.
 //
 // The exposed shape mirrors the subset of `plugin-store` we actually use
 // (`get`, `set`, `save`) so we can swap backends without touching call
 // sites in the session/preferences stores.
 
 import { isTauriHost } from '../platform';
+import { readMigrated, STORAGE_PREFIX } from '../legacy-storage';
 
 export interface KVStore {
   get<T>(key: string): Promise<T | null>;
@@ -20,17 +21,15 @@ class WebKVStore implements KVStore {
   private data: Record<string, unknown>;
 
   constructor(name: string) {
-    this.storageKey = `acp-ui:${name}`;
+    this.storageKey = `${STORAGE_PREFIX}:${name}`;
     this.data = {};
-    if (typeof localStorage !== 'undefined') {
-      const raw = localStorage.getItem(this.storageKey);
-      if (raw) {
-        try {
-          this.data = JSON.parse(raw) ?? {};
-        } catch (e) {
-          console.warn(`Failed to parse ${this.storageKey} from localStorage:`, e);
-          this.data = {};
-        }
+    const raw = readMigrated(this.storageKey);
+    if (raw) {
+      try {
+        this.data = JSON.parse(raw) ?? {};
+      } catch (e) {
+        console.warn(`Failed to parse ${this.storageKey} from localStorage:`, e);
+        this.data = {};
       }
     }
   }

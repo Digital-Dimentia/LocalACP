@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch acp-ui against fixtures/mock-acp-agent.mjs, the agent that reproduces
+# Launch LocalACP against fixtures/mock-acp-agent.mjs, the agent that reproduces
 # https://github.com/formulahendry/acp-ui/issues/9 (tool calls arriving before
 # any assistant message). Registering it by hand means finding the per-platform
 # agents.json and writing an absolute path into it; this does that step for you.
@@ -9,7 +9,8 @@
 #   ./scripts/start-mock.sh --ws [port]  # run the fixture as a WebSocket agent
 #                                        # for the web build (default port 8791)
 #
-# Set ACP_UI_AGENTS_FILE to point the registration at a different config file.
+# Set LOCALACP_AGENTS_FILE to point the registration at a different config file
+# (the pre-rename ACP_UI_AGENTS_FILE is still honoured).
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -32,13 +33,13 @@ fi
 # desktop build reads agents.json from.
 default_agents_file() {
   case "$(uname -s)" in
-    Darwin) echo "$HOME/Library/Application Support/acp-ui/agents.json" ;;
-    MINGW*|MSYS*|CYGWIN*) echo "${APPDATA:-$HOME/AppData/Roaming}/acp-ui/agents.json" ;;
-    *) echo "${XDG_CONFIG_HOME:-$HOME/.config}/acp-ui/agents.json" ;;
+    Darwin) echo "$HOME/Library/Application Support/LocalACP/agents.json" ;;
+    MINGW*|MSYS*|CYGWIN*) echo "${APPDATA:-$HOME/AppData/Roaming}/LocalACP/agents.json" ;;
+    *) echo "${XDG_CONFIG_HOME:-$HOME/.config}/LocalACP/agents.json" ;;
   esac
 }
 
-AGENTS_FILE="${ACP_UI_AGENTS_FILE:-$(default_agents_file)}"
+AGENTS_FILE="${LOCALACP_AGENTS_FILE:-${ACP_UI_AGENTS_FILE:-$(default_agents_file)}}"
 mkdir -p "$(dirname "$AGENTS_FILE")"
 
 # Merge rather than overwrite: the file usually holds the user's real agents.

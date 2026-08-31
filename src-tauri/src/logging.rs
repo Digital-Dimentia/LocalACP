@@ -1,7 +1,7 @@
 //! Persistent application logging.
 //!
 //! Wires up `tauri-plugin-log` with two targets: a rotating file in the OS log
-//! directory (`~/Library/Logs/formulahendry.acp-ui/LocalACP.log` on macOS) and
+//! directory (`~/Library/Logs/com.digitaldimentia.localacp/LocalACP.log` on macOS) and
 //! stdout, which is only visible during `tauri dev`. The frontend logs through
 //! the same pipeline via `@tauri-apps/plugin-log`, so webview and Rust output
 //! interleave in one file — the whole point, since a failed agent launch
@@ -68,7 +68,7 @@ struct LoggingSettings {
 fn settings_path(_app: &AppHandle) -> Option<PathBuf> {
     #[cfg(desktop)]
     {
-        return dirs::config_dir().map(|p| p.join("acp-ui").join("logging.json"));
+        return crate::config::desktop_config_path("logging.json");
     }
     #[cfg(not(desktop))]
     {
@@ -170,7 +170,7 @@ mod tests {
     /// touch the filesystem.
     fn temp_path(name: &str) -> PathBuf {
         std::env::temp_dir()
-            .join(format!("acp-ui-logging-test-{}", name))
+            .join(format!("localacp-logging-test-{}", name))
             .join("logging.json")
     }
 

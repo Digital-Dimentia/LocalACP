@@ -403,14 +403,51 @@ impl ConfigManager {
     }
 }
 
+/// Directory name this app keeps its desktop config under, and the name it
+/// used when it was still called `acp-ui`.
+#[cfg(desktop)]
+pub(crate) const CONFIG_DIR: &str = "LocalACP";
+#[cfg(desktop)]
+pub(crate) const LEGACY_CONFIG_DIR: &str = "acp-ui";
+
+/// Resolve `<config dir>/LocalACP/<file>`, first-run-migrating the file from
+/// the pre-rename `acp-ui` directory when it is only present there.
+///
+/// The rename from ACP UI to LocalACP moved the config directory, so an
+/// install that predates it has its `agents.json` (and `logging.json`) under
+/// the old name. We copy rather than move: the old tree is left intact so a
+/// downgrade still finds its settings, and a copy that fails part-way cannot
+/// destroy the only surviving copy. The copy is skipped entirely once the new
+/// file exists, so a user who edits the new file never has it clobbered.
+#[cfg(desktop)]
+pub(crate) fn desktop_config_path(file: &str) -> Option<PathBuf> {
+    let base = dirs::config_dir()?;
+    let path = base.join(CONFIG_DIR).join(file);
+    if !path.exists() {
+        let legacy = base.join(LEGACY_CONFIG_DIR).join(file);
+        if legacy.exists() {
+            // Best-effort: a failure here just means the user starts fresh,
+            // which is strictly better than refusing to launch.
+            if let Some(parent) = path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            match fs::copy(&legacy, &path) {
+                Ok(_) => log::info!(
+                    "migrated {} from the legacy {} config directory",
+                    file,
+                    LEGACY_CONFIG_DIR
+                ),
+                Err(e) => log::warn!("could not migrate {} from {:?}: {}", file, legacy, e),
+            }
+        }
+    }
+    Some(path)
+}
+
 fn get_config_path(_app: &AppHandle) -> Result<PathBuf, String> {
-    // On desktop we keep the historical `~/.config/acp-ui/agents.json`
-    // (resp. %APPDATA%\acp-ui, ~/Library/Application Support/acp-ui)
-    // so existing installations don't need to migrate.
     #[cfg(desktop)]
     {
-        return dirs::config_dir()
-            .map(|p| p.join("acp-ui").join("agents.json"))
+        return desktop_config_path("agents.json")
             .ok_or_else(|| "Could not find config directory".to_string());
     }
     // On mobile, the only writable per-app location is the sandbox config

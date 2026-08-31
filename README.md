@@ -1,56 +1,52 @@
-# ACP UI
-
-<a href="https://apps.microsoft.com/detail/9P76NGS1VF2L?referrer=appbadge&mode=full" target="_blank"  rel="noopener noreferrer">
-	<img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200"/>
-</a>
+# LocalACP
 
 A modern, cross-platform client for the [Agent Client Protocol (ACP)](https://agentclientprotocol.com/) on desktop, mobile, and the web. Connect to AI coding agents like GitHub Copilot, Claude Code, Gemini CLI, Qwen Code, Codex CLI, OpenCode, OpenClaw, Kiro CLI, Hermes Agent, and any ACP-compatible agent from a unified interface.
 
-![ACP UI on Windows, light theme](assets/screenshot.png)
+![LocalACP on Windows, light theme](assets/screenshot.png)
 
-![ACP UI on macOS, dark theme](assets/screenshot-macos-dark.png)
+![LocalACP on macOS, dark theme](assets/screenshot-macos-dark.png)
 
-## 🌍 Try it in your browser
+## 🌍 Run it in your browser
 
-No install required — open **[https://acp-ui.github.io/](https://acp-ui.github.io/)** and connect to a remote ACP agent over WebSocket. The web build supports the same chat, sessions, permissions, and traffic-monitor features as the desktop and mobile apps; it only omits local stdio agents and host filesystem access (which require a local subprocess and aren't available in a browser tab).
+LocalACP publishes **no hosted web build** — run the bundle yourself with `npm run preview:web` (see [Building / running the web app](#building--running-the-web-app)) and connect to a remote ACP agent over WebSocket. The web build supports the same chat, sessions, permissions, and traffic-monitor features as the desktop and mobile apps; it only omits local stdio agents and host filesystem access (which require a local subprocess and aren't available in a browser tab).
 
-> Pages served over HTTPS can only open `wss://` URLs (browser mixed-content rule). For LAN `ws://` access, run the bundle locally (`npm run preview:web`) or use a `wss://` tunnel — see [Connecting from your phone or browser](#-connecting-from-your-phone-or-browser), the same setup works for the web build.
+> A page served over HTTPS can only open `wss://` URLs (browser mixed-content rule). Served from `localhost` it can use plain `ws://`, which is the easy path for LAN agents — see [Connecting from your phone or browser](#-connecting-from-your-phone-or-browser).
 
 ## 📥 Installation
 
-Download the latest release for your platform from [GitHub Releases](https://github.com/formulahendry/acp-ui/releases):
+Download the latest release for your platform from [GitHub Releases](https://github.com/Digital-Dimentia/LocalACP/releases):
 
 | Platform | Download |
 |----------|----------|
-| **Web** | [https://acp-ui.github.io/](https://acp-ui.github.io/) — no install, opens in any modern browser |
-| **Windows** | [.msi installer](https://github.com/formulahendry/acp-ui/releases/latest) or [.exe (NSIS)](https://github.com/formulahendry/acp-ui/releases/latest) |
-| **macOS (Apple Silicon)** | [.dmg (ARM64)](https://github.com/formulahendry/acp-ui/releases/latest) |
-| **macOS (Intel)** | [.dmg (x64)](https://github.com/formulahendry/acp-ui/releases/latest) |
-| **Linux (x64)** | [.deb](https://github.com/formulahendry/acp-ui/releases/latest) or [.AppImage](https://github.com/formulahendry/acp-ui/releases/latest) or [.rpm](https://github.com/formulahendry/acp-ui/releases/latest) |
-| **Linux (ARM64)** | [.deb](https://github.com/formulahendry/acp-ui/releases/latest) or [.AppImage](https://github.com/formulahendry/acp-ui/releases/latest) or [.rpm](https://github.com/formulahendry/acp-ui/releases/latest) |
-| **Android** | [.apk](https://github.com/formulahendry/acp-ui/releases/latest) — sideload via "Install unknown apps" |
+| **Web** | No prebuilt bundle — build and serve it yourself (see [Building / running the web app](#building--running-the-web-app)) |
+| **Windows** | [.msi installer](https://github.com/Digital-Dimentia/LocalACP/releases/latest) or [.exe (NSIS)](https://github.com/Digital-Dimentia/LocalACP/releases/latest) |
+| **macOS (Apple Silicon)** | [.dmg (ARM64)](https://github.com/Digital-Dimentia/LocalACP/releases/latest) |
+| **macOS (Intel)** | [.dmg (x64)](https://github.com/Digital-Dimentia/LocalACP/releases/latest) |
+| **Linux (x64)** | [.deb](https://github.com/Digital-Dimentia/LocalACP/releases/latest) or [.AppImage](https://github.com/Digital-Dimentia/LocalACP/releases/latest) or [.rpm](https://github.com/Digital-Dimentia/LocalACP/releases/latest) |
+| **Linux (ARM64)** | [.deb](https://github.com/Digital-Dimentia/LocalACP/releases/latest) or [.AppImage](https://github.com/Digital-Dimentia/LocalACP/releases/latest) or [.rpm](https://github.com/Digital-Dimentia/LocalACP/releases/latest) |
+| **Android** | [.apk](https://github.com/Digital-Dimentia/LocalACP/releases/latest) — sideload via "Install unknown apps" |
 | **iOS** | Build from source (see [Building for iOS](#building-for-ios)) — no prebuilt binary |
 
 > Mobile and web builds connect to remote agents over WebSocket. See [Connecting from your phone or browser](#-connecting-from-your-phone-or-browser) for how to expose a local agent so a phone or browser can reach it.
 
 ### macOS first-launch note
 
-The macOS `.dmg` builds are ad-hoc signed but **not** notarized (no paid Apple Developer account), so on first launch macOS shows a dialog like *"Apple could not verify acp-ui is free of malware."* The app is not damaged — this is Gatekeeper's standard warning for un-notarized apps. Easiest fix, run once after installing or upgrading:
+The macOS `.dmg` builds are ad-hoc signed but **not** notarized (no paid Apple Developer account), so on first launch macOS shows a dialog like *"Apple could not verify LocalACP is free of malware."* The app is not damaged — this is Gatekeeper's standard warning for un-notarized apps. Easiest fix, run once after installing or upgrading:
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/acp-ui.app
+xattr -dr com.apple.quarantine /Applications/LocalACP.app
 ```
 
 Then open the app normally. Alternatives if you'd rather not use the terminal:
 
-- **macOS 15 Sequoia and later** — open **System Settings → Privacy & Security**, scroll to the bottom, click **Open Anyway** next to the acp-ui entry, authenticate, then re-launch the app.
-- **macOS 14 Sonoma and earlier** — right-click (or Control-click) `acp-ui.app` in Finder → **Open** → click **Open** in the follow-up dialog.
+- **macOS 15 Sequoia and later** — open **System Settings → Privacy & Security**, scroll to the bottom, click **Open Anyway** next to the LocalACP entry, authenticate, then re-launch the app.
+- **macOS 14 Sonoma and earlier** — right-click (or Control-click) `LocalACP.app` in Finder → **Open** → click **Open** in the follow-up dialog.
 
 ## ✨ Features
 
 - **Multi-Agent Support** — Connect to any ACP-compatible agent
 - **Remote agents over WebSocket** — Talk to agents on another machine via `ws://` / `wss://`
-- **Web app** — Run in any modern browser at [acp-ui.github.io](https://acp-ui.github.io/) without installing anything
+- **Web app** — Build and serve the browser bundle yourself (`npm run preview:web`)
 - **Mobile** — Android APK shipped on Releases; iOS via local Xcode build
 - **Foreground reconnect** — On mobile and the web, automatically reattaches to your session when the app/tab regains focus
 - **Session Management** — Create, resume, and manage conversation sessions
@@ -68,7 +64,7 @@ Then open the app normally. Alternatives if you'd rather not use the terminal:
 
 ## 🎯 Default Agents
 
-ACP UI comes pre-configured with these agents:
+LocalACP comes pre-configured with these agents:
 
 | Agent | Package |
 |-------|---------|
@@ -90,12 +86,14 @@ Agent configurations are stored in:
 
 | Platform | Path |
 |----------|------|
-| Windows | `%APPDATA%\acp-ui\agents.json` |
-| macOS | `~/Library/Application Support/acp-ui/agents.json` |
-| Linux | `~/.config/acp-ui/agents.json` |
-| Android | `/data/data/formulahendry.acp_ui/files/agents.json` (managed via Settings UI) |
+| Windows | `%APPDATA%\LocalACP\agents.json` |
+| macOS | `~/Library/Application Support/LocalACP/agents.json` |
+| Linux | `~/.config/LocalACP/agents.json` |
+| Android | `/data/data/com.digitaldimentia.localacp/files/agents.json` (managed via Settings UI) |
 | iOS | App sandbox — managed via Settings UI |
-| Web | Browser `localStorage` (key `acp-ui:agents`) — managed via Settings UI |
+| Web | Browser `localStorage` (key `localacp:agents`) — managed via Settings UI |
+
+> **Upgrading from ACP UI?** The desktop config directory was renamed from `acp-ui` to `LocalACP`. On first launch LocalACP copies `agents.json` and `logging.json` out of the old directory, leaving the originals in place. The browser build promotes its `acp-ui:*` `localStorage` keys to `localacp:*` the same way.
 
 > On mobile and the web the config file isn't user-accessible — add and edit agents through the in-app **Settings** dialog. Stdio agents are filtered out of the list since they can't run in a browser or on a phone. Web-app config is per-browser per-origin: it doesn't sync across machines, and clearing site data wipes it.
 
@@ -195,10 +193,10 @@ Both `ws://` (cleartext, for LAN / Dev Tunnels) and `wss://` (TLS) are accepted.
 >
 > | Platform | Location |
 > |---|---|
-> | macOS | `~/Library/Application Support/acp-ui/agents.json` |
-> | Linux | `~/.config/acp-ui/agents.json` |
-> | Windows | `%APPDATA%\acp-ui\agents.json` |
-> | Web build | `localStorage`, key `acp-ui:agents` |
+> | macOS | `~/Library/Application Support/LocalACP/agents.json` |
+> | Linux | `~/.config/LocalACP/agents.json` |
+> | Windows | `%APPDATA%\LocalACP\agents.json` |
+> | Web build | `localStorage`, key `localacp:agents` |
 >
 > The file has default permissions and no OS keychain is used, so treat it as a secret: anything that can read your home directory can read your tokens. On the web build, any script running in the page's origin can read them.
 >
@@ -208,7 +206,7 @@ Both `ws://` (cleartext, for LAN / Dev Tunnels) and `wss://` (TLS) are accepted.
 
 ## 🌐 Connecting from your phone or browser
 
-The mobile and web builds can only talk to remote agents (no subprocess in a phone or browser sandbox), so you need to expose a local stdio agent over a network endpoint. The recommended bridge is [`@rebornix/stdio-to-ws`](https://www.npmjs.com/package/@rebornix/stdio-to-ws), which speaks ACP-over-WebSocket on one end and stdio on the other. The same setup works for the web build at [acp-ui.github.io](https://acp-ui.github.io/) — with one extra rule: the HTTPS page can only open `wss://` URLs (see [HTTPS pages must use `wss://`](#browser-only-https-pages-must-use-wss) below).
+The mobile and web builds can only talk to remote agents (no subprocess in a phone or browser sandbox), so you need to expose a local stdio agent over a network endpoint. The recommended bridge is [`@rebornix/stdio-to-ws`](https://www.npmjs.com/package/@rebornix/stdio-to-ws), which speaks ACP-over-WebSocket on one end and stdio on the other. The same setup works for the web build — with one extra rule: if you serve it over HTTPS, the page can only open `wss://` URLs (see [HTTPS pages must use `wss://`](#browser-only-https-pages-must-use-wss) below).
 
 ### Same Wi-Fi (LAN)
 
@@ -224,7 +222,7 @@ npx @rebornix/stdio-to-ws "copilot --acp" --port 3000 --persist --grace-period -
     New-NetFirewallRule -DisplayName "stdio-to-ws" -Direction Inbound -LocalPort 3000 -Protocol TCP -Action Allow -Profile Private
     ```
 - Find your computer's LAN IP (`ipconfig` on Windows, `ifconfig`/`ip a` on macOS / Linux).
-- In ACP UI on the phone, add a websocket agent with URL `ws://<LAN IP>:3000/`.
+- In LocalACP on the phone, add a websocket agent with URL `ws://<LAN IP>:3000/`.
 
 > **Android emulator** uses `ws://10.0.2.2:3000/`. **USB-tethered phone** can use `ws://localhost:3000/` after running `adb reverse tcp:3000 tcp:3000`.
 
@@ -246,7 +244,7 @@ devtunnel host -p 3000
 https://<id>-3000.<region>.devtunnels.ms
 ```
 
-Use the **`wss://...devtunnels.ms/`** form (replace `https` with `wss`) as the agent URL in ACP UI on the phone or in the [web app](https://acp-ui.github.io/).
+Use the **`wss://...devtunnels.ms/`** form (replace `https` with `wss`) as the agent URL in LocalACP on the phone or in the web build.
 
 #### Stable URL across restarts
 
@@ -266,21 +264,21 @@ Reference: [Dev Tunnels CLI commands](https://learn.microsoft.com/en-us/azure/de
 
 #### Browser-only: HTTPS pages must use `wss://`
 
-When you open ACP UI in a browser at [acp-ui.github.io](https://acp-ui.github.io/), the page is served over HTTPS, and the browser blocks plain `ws://` connections (mixed-content rule). Two options:
+If you serve the LocalACP web build over HTTPS, the browser blocks plain `ws://` connections (mixed-content rule). Two options:
 
 - **Easy:** front your bridge with a `wss://` URL (Dev Tunnels above gives you one for free).
-- **LAN-only:** serve the bundle locally instead of the hosted site:
+- **LAN-only:** serve the bundle from `localhost`, which is exempt from the rule:
 
   ```sh
-  git clone https://github.com/formulahendry/acp-ui.git
-  cd acp-ui && npm install && npm run preview:web
+  git clone https://github.com/Digital-Dimentia/LocalACP.git
+  cd LocalACP && npm install && npm run preview:web
   ```
 
   then open `http://localhost:4173/` and add a `ws://<LAN IP>:3000/` agent as usual.
 
 #### Why `--persist --grace-period -1`?
 
-Mobile OSes freeze backgrounded apps within seconds, dropping the WebSocket. `--persist` tells the bridge to keep the wrapped agent alive across disconnects, and `--grace-period -1` makes that timeout infinite. When ACP UI on the phone returns to the foreground, it transparently reattaches via `session/load` and your conversation resumes. Without persistence, you'd lose the running agent every time you switched apps.
+Mobile OSes freeze backgrounded apps within seconds, dropping the WebSocket. `--persist` tells the bridge to keep the wrapped agent alive across disconnects, and `--grace-period -1` makes that timeout infinite. When LocalACP on the phone returns to the foreground, it transparently reattaches via `session/load` and your conversation resumes. Without persistence, you'd lose the running agent every time you switched apps.
 
 > **Tip**: a future `stdio-to-ws` release will integrate Dev Tunnels into the bridge itself (`--tunnel-name <name>`, currently only on its `dev` branch). Once published you'll be able to collapse the two terminals into one.
 
@@ -304,8 +302,8 @@ Mobile OSes freeze backgrounded apps within seconds, dropping the WebSocket. `--
 
 ```bash
 # Clone the repository
-git clone https://github.com/formulahendry/acp-ui.git
-cd acp-ui
+git clone https://github.com/Digital-Dimentia/LocalACP.git
+cd LocalACP
 
 # Install dependencies
 npm install
@@ -347,12 +345,12 @@ All three fields can also be overridden per build without editing the file,
 which is the convenient form for CI:
 
 ```bash
-export ACP_UI_BRAND_NAME="Acme Agent Console"
-export ACP_UI_BRAND_ICON="assets/brand/acme-mark.svg"
+export LOCALACP_BRAND_NAME="Acme Agent Console"
+export LOCALACP_BRAND_ICON="assets/brand/acme-mark.svg"
 npm run brand:apply && npm run tauri build
 ```
 
-The name replaces "ACP UI" in the sidebar header, the welcome pane, the browser
+The name replaces "LocalACP" in the sidebar header, the welcome pane, the browser
 tab, the native window title, the macOS Dock label and the `About` / `Hide` /
 `Quit` items in the application menu. The icon renders immediately left of the name
 at 24x24 CSS pixels; supply it at 48x48 or larger, or as an SVG, so it stays
@@ -458,7 +456,7 @@ npm run build:web
 npm run preview:web
 ```
 
-The live deployment at [acp-ui.github.io](https://acp-ui.github.io/) is published from `dist-web/` by [.github/workflows/deploy-web.yml](.github/workflows/deploy-web.yml) on every push to `main`.
+LocalACP publishes no hosted web build — `dist-web/` is served by whoever builds it.
 
 ### Building for Android
 
@@ -474,7 +472,7 @@ Prerequisites:
 npm run tauri android init
 
 # Allow plain ws:// to LAN agents (the init template defaults this off via
-# a Gradle placeholder). Required for ACP UI's LAN-agent UX.
+# a Gradle placeholder). Required for LocalACP's LAN-agent UX.
 sed -i 's|usesCleartextTraffic="\${usesCleartextTraffic}"|usesCleartextTraffic="true"|' \
   src-tauri/gen/android/app/src/main/AndroidManifest.xml
 
@@ -511,7 +509,7 @@ Then edit `src-tauri/gen/apple/<app>_iOS/Info.plist` and add:
   <key>NSAllowsArbitraryLoads</key><true/>
 </dict>
 <key>NSLocalNetworkUsageDescription</key>
-<string>ACP UI connects to ACP agents you configure, including agents on your local network.</string>
+<string>LocalACP connects to ACP agents you configure, including agents on your local network.</string>
 ```
 
 Build and install via Xcode (`.xcworkspace`), or run on a connected device:
@@ -524,7 +522,7 @@ iOS doesn't ship a binary today because it requires per-developer signing and an
 
 ## 🔒 Privacy
 
-ACP UI can report anonymous usage data to Azure Application Insights. **It is off by default and nothing is sent unless you turn it on.**
+LocalACP can report anonymous usage data to Azure Application Insights. **It is off by default and nothing is sent unless you turn it on.**
 
 Enable or disable it any time under **Settings → Privacy → "Send anonymous usage data"**. Turning it off takes effect immediately — the reporting SDK is torn down, not just muted, so no further events are collected. Anything already queued at that moment is flushed as the SDK shuts down.
 

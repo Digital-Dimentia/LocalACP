@@ -1,6 +1,6 @@
 # Notes for agent implementers
 
-What acp-ui does with what you send, and what you can send that makes it do
+What LocalACP does with what you send, and what you can send that makes it do
 more. Written for python-acp first, but nothing here is specific to it.
 
 **The rule this document keeps:** every suggestion stays inside the ACP
@@ -9,19 +9,19 @@ protocol's own extensibility point — and never a private method, a magic
 string in a message body, or a field invented on a typed struct. An agent that
 follows none of this still works; everything below is additive.
 
-acp-ui speaks **ACP v1** and refuses to continue if `initialize` negotiates
+LocalACP speaks **ACP v1** and refuses to continue if `initialize` negotiates
 anything else (`src/stores/session.ts:72`).
 
 ---
 
 ## 1. The handshake
 
-acp-ui sends (`src/stores/session.ts:592`):
+LocalACP sends (`src/stores/session.ts:592`):
 
 ```json
 {
   "clientCapabilities": { "fs": { "readTextFile": true, "writeTextFile": true } },
-  "clientInfo": { "name": "acp-ui", "title": "ACP UI", "version": "…" }
+  "clientInfo": { "name": "localacp", "title": "LocalACP", "version": "…" }
 }
 ```
 
@@ -29,14 +29,14 @@ acp-ui sends (`src/stores/session.ts:592`):
 **Read it and honour it.** An agent that calls `fs/read_text_file` because it
 assumes every client has one gets a method-not-found and a broken turn.
 
-acp-ui reads back exactly two things from your response:
+LocalACP reads back exactly two things from your response:
 
 | Field | What it changes |
 |---|---|
 | `agentCapabilities.loadSession` | Whether sessions are resumable at all |
-| `agentCapabilities.mcpCapabilities` | Which MCP transports acp-ui offers you (`src/lib/types.ts`, `toWireMcpServers`) |
+| `agentCapabilities.mcpCapabilities` | Which MCP transports LocalACP offers you (`src/lib/types.ts`, `toWireMcpServers`) |
 
-`mcpCapabilities` matters more than it looks: acp-ui holds the user's MCP
+`mcpCapabilities` matters more than it looks: LocalACP holds the user's MCP
 server list and filters it to the transports you say you support. Understate
 your capabilities and servers are silently withheld; overstate them and the
 user sees "MCP is broken" when your side fails to connect.
@@ -49,7 +49,7 @@ This is the one new thing, and the reason the document exists.
 
 **Today.** You announce one `AvailableCommand` per MCP tool. Its `input` is
 `UnstructuredCommandInput` — a single free-text `hint` string, which is ACP's
-only argument shape. acp-ui renders that hint as a placeholder over a text box
+only argument shape. LocalACP renders that hint as a placeholder over a text box
 and the user types a command line by hand, learning the flag names, the types
 and the legal enum values by trial and error.
 
@@ -73,7 +73,7 @@ AvailableCommand(
 )
 ```
 
-With that, acp-ui renders a real form: typed inputs, required markers, ranges,
+With that, LocalACP renders a real form: typed inputs, required markers, ranges,
 and **enum values as dropdowns** instead of a value the user has to know and
 spell correctly.
 
@@ -81,7 +81,7 @@ spell correctly.
 
 - **Namespace the key.** ACP says implementations MUST NOT make assumptions
   about `_meta` values. An unnamespaced `inputSchema` is a land grab on a
-  shared dict. acp-ui reads `_meta["python-acp/tool"].inputSchema` first and a
+  shared dict. LocalACP reads `_meta["python-acp/tool"].inputSchema` first and a
   bare `_meta.inputSchema` second, so another agent can adopt the idea without
   adopting our namespace.
 - **Omit rather than fake.** A tool that publishes no schema should leave the
@@ -92,7 +92,7 @@ spell correctly.
   server's own vocabulary, and a helpfully-rewritten schema is one more place
   for the form and the parser to disagree.
 
-### What acp-ui uses
+### What LocalACP uses
 
 `properties`, `required`, and per-property `type`, `title`, `description`,
 `default`, `enum` (+ `enumNames` or `oneOf[].title` for labels), `format`,
@@ -117,7 +117,7 @@ Do not pre-optimise a payload nobody has weighed.
 
 ### Validation stays yours
 
-A client-side form is a convenience. **acp-ui does not treat a locally-valid
+A client-side form is a convenience. **LocalACP does not treat a locally-valid
 form as pre-approved**, and neither should you: keep validating on arrival
 (python-acp's `coerce_arguments`, `commands.py:638`). Any client can send any
 line. A form that let the agent skip its own checks would be a regression in
@@ -133,7 +133,7 @@ exactly the direction that matters.
 - `input.hint` should describe a command that really runs. It is the only
   syntax documentation most users will ever see, and until schemas arrive it
   is the *only* thing standing between them and a positional guess.
-- Announce commands as early as you can. acp-ui's palette is empty until the
+- Announce commands as early as you can. LocalACP's palette is empty until the
   first `available_commands_update`, and an empty palette reads as "this agent
   has no commands", not "the list has not arrived yet".
 
@@ -142,11 +142,11 @@ exactly the direction that matters.
 ## 4. Tool calls
 
 `ToolCall` carries `toolCallId`, `title`, `kind`, `status`, `content`,
-`locations`, `rawInput`, `rawOutput`. acp-ui renders the first five today and
+`locations`, `rawInput`, `rawOutput`. LocalACP renders the first five today and
 tracks `rawInput`/`rawOutput` as future work (`acpui-n3z`) — send them anyway,
 they cost you nothing and unblock that work with no agent change.
 
-**Send a `tool_call` before the work, and `tool_call_update` after.** acp-ui
+**Send a `tool_call` before the work, and `tool_call_update` after.** LocalACP
 handles a call that only ever appears as a terminal update
 (`src/stores/session.ts:398`) — it synthesises the opening row — but then the
 user sees nothing at all while the tool runs, which on a slow call is
@@ -159,7 +159,7 @@ to a generic wrench icon (`src/lib/tool-icons.ts`). It is worth getting right:
 touch their filesystem rather than read a web page.
 
 **`status` is `pending` → `in_progress` → `completed` | `failed`.** Report
-`failed` honestly. acp-ui keeps failed calls expanded when everything else
+`failed` honestly. LocalACP keeps failed calls expanded when everything else
 folds away, precisely so a failure is never silent — that only works if you
 mark them.
 
@@ -173,7 +173,7 @@ touched, in a form the UI can use.
 `session/request_permission` carries a `toolCall` and a list of `options`.
 
 **Set `toolCall.toolCallId` to the id of the call it gates.** This is the
-single highest-value field in the request. acp-ui collapses an answered
+single highest-value field in the request. LocalACP collapses an answered
 approval onto the very call it authorised
 (`src/components/timeline/rows/ToolInvokeRow.vue`); without a matching id the
 decision floats as an orphan row that names a call the user has to go find.
@@ -185,7 +185,7 @@ a tool they have already turned down. python-acp adds the fourth
 (`turn_mcp_router.py`, `PERMISSION_OPTIONS`); that asymmetry is worth fixing
 wherever it appears.
 
-acp-ui treats **only** `allow_once` and `allow_always` as permission to
+LocalACP treats **only** `allow_once` and `allow_always` as permission to
 proceed (`isAllowOption`, `src/lib/timeline.ts:197`). An option kind it does
 not recognise is not treated as an allow, and an answered request with an
 unknown kind is labelled "Answered" rather than "Approved". Do not invent
@@ -196,11 +196,11 @@ kinds and expect them to be permissive.
 ## 6. The prompt echo
 
 Agents echo the user's prompt back as a `user_message_chunk`, correctly —
-that echo is what `session/load` replays history with. But acp-ui already
+that echo is what `session/load` replays history with. But LocalACP already
 rendered the text locally the moment the user hit send, so left alone the two
 collide and the bubble reads `/echo foo/echo foo`.
 
-acp-ui consumes the echo against what it already rendered
+LocalACP consumes the echo against what it already rendered
 (`src/lib/prompt-echo.ts`): chunks matching the pending text are dropped, and
 the moment one diverges, matching stops and everything from there renders.
 
@@ -211,7 +211,7 @@ prompt twice — once as they typed it, once as you rewrote it.
 
 ---
 
-## 7. Updates acp-ui ignores today
+## 7. Updates LocalACP ignores today
 
 These are valid ACP and are logged and dropped
 (`src/stores/session.ts:434`). Send them if they are cheap — nothing breaks —
@@ -221,7 +221,7 @@ today the user will never see it:
 `plan`, `plan_update`, `plan_removed`, `session_info_update`, `usage_update`,
 `config_option_update`.
 
-`config_option_update` is the notable one: acp-ui offers no UI for session
+`config_option_update` is the notable one: LocalACP offers no UI for session
 config options yet, so an agent's `configOptions` are neither shown nor
 settable. Keep your defaults working for a client that never touches them.
 
@@ -233,7 +233,7 @@ settable. Keep your defaults working for a client that never touches them.
    `_meta`. A client that ignores it must still get a correct session.
 2. **Omit over null.** An absent field says "nothing to say"; a null-shaped
    one says the same thing but makes every reader defend against it.
-3. **Degrade, do not fail.** acp-ui treats a malformed `_meta` as absent
+3. **Degrade, do not fail.** LocalACP treats a malformed `_meta` as absent
    rather than as an error, because a broken schema must never cost the user
    the command. Extend the same courtesy in the other direction.
 4. **Assume the client is untrusted, because it is.** Everything a client
