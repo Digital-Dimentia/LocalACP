@@ -12,11 +12,11 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 #[cfg(desktop)]
 use std::thread;
+use tauri::AppHandle;
 #[cfg(desktop)]
 use tauri::Emitter;
 #[cfg(desktop)]
 use uuid::Uuid;
-use tauri::AppHandle;
 
 #[cfg(all(desktop, target_os = "windows"))]
 use std::os::windows::process::CommandExt;
@@ -62,6 +62,28 @@ pub struct AgentManager {
     // stdio transport is unavailable: any spawn attempt errors out and the
     // app is expected to use a remote (websocket/http) transport instead.
     _phantom: std::marker::PhantomData<()>,
+}
+
+/// Build the PATH for a spawned stdio agent on macOS.
+///
+/// A GUI app launched from Finder/Dock inherits launchd's minimal PATH, so
+/// Homebrew binaries (`claude`, `npx`) are unresolvable and the spawn fails
+/// with "command not found". Fix it by APPENDING a fixed, auditable set of
+/// directories rather than by sourcing the user's shell profile.
+///
+/// Append, never prepend: entries already on PATH keep precedence, so a
+/// group-writable /usr/local/bin can never shadow a system binary. An explicit
+/// PATH from the agent's config is used as the base and kept in full.
+#[cfg(all(desktop, target_os = "macos"))]
+fn build_spawn_path(config_path: Option<&str>, inherited_path: &str) -> String {
+    let base = config_path.unwrap_or(inherited_path);
+    let mut entries: Vec<&str> = base.split(':').filter(|s| !s.is_empty()).collect();
+    for extra in ["/opt/homebrew/bin", "/usr/local/bin"] {
+        if !entries.contains(&extra) {
+            entries.push(extra);
+        }
+    }
+    entries.join(":")
 }
 
 #[cfg(desktop)]
@@ -139,37 +161,47 @@ impl AgentManager {
                 format!("{} {}", escaped_command, quoted_args.join(" "))
             };
 
-            // Determine shell and whether it supports -l (login) flag
-            // bash, zsh, ksh support -l; fish, tcsh, csh, dash do not
-            let user_shell = std::env::var("SHELL").unwrap_or_default();
-            let shell_name = std::path::Path::new(&user_shell)
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("");
+            // Spawn through /bin/sh -c, NOT through the user's $SHELL as a
+            // login shell. A login shell sources the user's profile, which
+            // (a) executes arbitrary user code from a path we cannot validate,
+            // (b) prints whatever it likes onto the child's stdout -- the exact
+            // pipe the ACP client parses as line-delimited JSON-RPC, so any
+            // banner breaks the connection, (c) can reassign PATH and clobber
+            // the agent's configured env, and (d) can block forever on an
+            // interactive prompt. PATH is instead enriched deterministically
+            // below, which is what the profile was being sourced for.
+            let mut cmd = Command::new("/bin/sh");
+            cmd.arg("-c").arg(&shell_command).envs(&config.env);
 
-            let (shell, use_login_flag) = match shell_name {
-                "bash" | "zsh" | "ksh" => (user_shell.as_str(), true),
-                "fish" => (user_shell.as_str(), false), // fish auto-loads config
-                _ => {
-                    // Probe for bash at common paths, fall back to /bin/sh (common default on Unix-like systems)
-                    if std::path::Path::new("/bin/bash").exists() {
-                        ("/bin/bash", true)
-                    } else if std::path::Path::new("/usr/bin/bash").exists() {
-                        ("/usr/bin/bash", true)
-                    } else {
-                        ("/bin/sh", false) // /bin/sh may be dash; don't use -l
-                    }
-                }
-            };
-
-            let mut cmd = Command::new(shell);
-            if use_login_flag {
-                cmd.arg("-l"); // login shell to source user's profile
+            // config.env is applied first so the merged PATH below wins over a
+            // raw config value; the merge itself preserves the user's PATH in
+            // full and only appends after it.
+            #[cfg(target_os = "macos")]
+            {
+                let effective_path = build_spawn_path(
+                    config.env.get("PATH").map(String::as_str),
+                    &std::env::var("PATH").unwrap_or_default(),
+                );
+                log::debug!(
+                    "Spawning agent '{}' with /bin/sh -c (no login shell); PATH={}",
+                    name,
+                    effective_path
+                );
+                cmd.env("PATH", effective_path);
             }
-            cmd.arg("-c")
-                .arg(&shell_command)
-                .envs(&config.env)
-                .stdin(Stdio::piped())
+
+            #[cfg(not(target_os = "macos"))]
+            log::debug!(
+                "Spawning agent '{}' with /bin/sh -c (no login shell); PATH={}",
+                name,
+                config
+                    .env
+                    .get("PATH")
+                    .cloned()
+                    .unwrap_or_else(|| std::env::var("PATH").unwrap_or_default())
+            );
+
+            cmd.stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .spawn()
@@ -244,10 +276,7 @@ impl AgentManager {
         let running_agent = RunningAgent { child, stdin };
         self.agents.write().insert(agent_id.clone(), running_agent);
 
-        Ok(AgentInstance {
-            id: agent_id,
-            name,
-        })
+        Ok(AgentInstance { id: agent_id, name })
     }
 
     pub fn send_message(&self, agent_id: &str, message: &str) -> Result<(), String> {
@@ -314,5 +343,50 @@ impl AgentManager {
 impl Default for AgentManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(all(test, desktop, target_os = "macos"))]
+mod tests {
+    use super::build_spawn_path;
+
+    #[test]
+    fn appends_homebrew_dirs_to_the_inherited_path() {
+        assert_eq!(
+            build_spawn_path(None, "/usr/bin:/bin"),
+            "/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin"
+        );
+    }
+
+    #[test]
+    fn config_path_is_preserved_in_full_and_keeps_precedence() {
+        assert_eq!(
+            build_spawn_path(Some("/my/tools:/usr/bin"), "/inherited/only"),
+            "/my/tools:/usr/bin:/opt/homebrew/bin:/usr/local/bin"
+        );
+    }
+
+    #[test]
+    fn existing_entries_are_not_duplicated_or_reordered() {
+        assert_eq!(
+            build_spawn_path(None, "/usr/local/bin:/usr/bin"),
+            "/usr/local/bin:/usr/bin:/opt/homebrew/bin"
+        );
+    }
+
+    #[test]
+    fn empty_segments_are_dropped() {
+        assert_eq!(
+            build_spawn_path(None, ":/usr/bin::"),
+            "/usr/bin:/opt/homebrew/bin:/usr/local/bin"
+        );
+    }
+
+    #[test]
+    fn empty_path_yields_only_the_appended_dirs() {
+        assert_eq!(
+            build_spawn_path(None, ""),
+            "/opt/homebrew/bin:/usr/local/bin"
+        );
     }
 }
