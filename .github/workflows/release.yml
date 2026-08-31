@@ -44,34 +44,51 @@ jobs:
         with:
           node-version: lts/*
 
+      # Normalise once, here, rather than at each use site. `npm version`
+      # silently accepts and strips a leading `v`, but jq and sed do not: an
+      # input of `v0.3.0` used to write a literal `version = "v0.3.0"` into
+      # Cargo.toml, which is not valid semver and fails the build. Stripping
+      # the prefix and rejecting anything that is still not `x.y.z` means the
+      # run dies here, before it has pushed a commit and a tag.
+      - name: Normalise the requested version
+        id: version
+        run: |
+          version="${{ inputs.version }}"
+          version="${version#v}"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'${{ inputs.version }}' is not a semver version (expected x.y.z, optionally v-prefixed)."
+            exit 1
+          fi
+          echo "version=$version" >> $GITHUB_OUTPUT
+
       - name: Update version in package.json
-        run: npm version ${{ inputs.version }} --no-git-tag-version
+        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
 
       - name: Update version in tauri.conf.json
         run: |
-          jq '.version = "${{ inputs.version }}"' src-tauri/tauri.conf.json > tmp.json
+          jq '.version = "${{ steps.version.outputs.version }}"' src-tauri/tauri.conf.json > tmp.json
           mv tmp.json src-tauri/tauri.conf.json
 
-      - name: Update version in Cargo.toml
+      - name: Update version in Cargo.toml and Cargo.lock
         run: |
-          sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' src-tauri/Cargo.toml
+          sed -i '0,/^version = ".*"/s//version = "${{ steps.version.outputs.version }}"/' src-tauri/Cargo.toml
+          # Cargo.lock is committed and tauri's build precheck compares it
+          # against Cargo.toml, so a bumped manifest with a stale lockfile
+          # fails the build. `--offline` keeps this to the one local package.
+          cargo update --offline --manifest-path src-tauri/Cargo.toml --package localacp
 
       - name: Commit and push version changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
-          git commit -m "chore: release v${{ inputs.version }}"
+          git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+          git commit -m "chore: release v${{ steps.version.outputs.version }}"
           git push
 
       - name: Create and push tag
         run: |
-          git tag "v${{ inputs.version }}"
-          git push origin "v${{ inputs.version }}"
-
-      - name: Output version
-        id: version
-        run: echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
 
   # Get version from tag (for tag push trigger)
   get-version:
