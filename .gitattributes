@@ -2,7 +2,7 @@
 # core.autocrlf unset, so whether a file kept CRLF depended on which tool
 # last touched it. Any editor or script doing a naive text-mode
 # read-modify-write silently rewrote whole files, turning small edits into
-# whole-file diffs. See acpui-w1a.
+# whole-file diffs. See localacp-w1a.
 #
 # Normalise everything to LF in the repository AND in the working tree.
 # There are no .bat/.cmd/.ps1 files that need CRLF; if one is added, give it

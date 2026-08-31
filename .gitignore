@@ -24,7 +24,7 @@ src-tauri/gen/apple
 *.rs.bk
 # NOTE: Cargo.lock is intentionally committed. LocalACP is an application, not a
 # library — pinning the Rust dependency graph keeps it in step with the npm
-# lockfile, which tauri's build precheck compares against (see acpui-xjm).
+# lockfile, which tauri's build precheck compares against (see localacp-xjm).
 
 # Environment files (may contain secrets)
 .env

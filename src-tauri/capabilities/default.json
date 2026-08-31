@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window (desktop only). Read/write stay broad because ACP stdio agents legitimately touch any file under the working directory the user picks at runtime, which is not knowable at build time. The deny lists carve out credential stores and write targets that would turn a webview escape into code execution -- deny beats allow in Tauri's fs scope and paths are canonicalized first, so a symlink inside the cwd cannot reach them. See acpui-9va.5.",
+  "description": "Capability for the main window (desktop only). Read/write stay broad because ACP stdio agents legitimately touch any file under the working directory the user picks at runtime, which is not knowable at build time. The deny lists carve out credential stores and write targets that would turn a webview escape into code execution -- deny beats allow in Tauri's fs scope and paths are canonicalized first, so a symlink inside the cwd cannot reach them. See localacp-9va.5.",
   "windows": [
     "main"
   ],

@@ -174,7 +174,7 @@ is new. That invalidates `.git-blame-ignore-revs`, which currently names:
 
 ```
 db308460a46610877999b2d1b32626ff9eb1b571
-# chore: normalise all line endings to LF [mechanical] -- acpui-w1a
+# chore: normalise all line endings to LF [mechanical] -- localacp-w1a
 # 47 files, line terminators only, verified byte-identical under CRLF->LF.
 ```
 

@@ -6,7 +6,7 @@
 // message that never appears — and neither shows up in a type check.
 //
 // These cases were verified ad-hoc via esbuild + node when the module landed
-// (acpui-7g5, cf50572); this is that same set, made permanent now that there
+// (localacp-7g5, cf50572); this is that same set, made permanent now that there
 // is a runner to hold them.
 
 import { beginEcho, consumeEcho } from './prompt-echo';

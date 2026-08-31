@@ -143,7 +143,7 @@ exactly the direction that matters.
 
 `ToolCall` carries `toolCallId`, `title`, `kind`, `status`, `content`,
 `locations`, `rawInput`, `rawOutput`. LocalACP renders the first five today and
-tracks `rawInput`/`rawOutput` as future work (`acpui-n3z`) — send them anyway,
+tracks `rawInput`/`rawOutput` as future work (`localacp-n3z`) — send them anyway,
 they cost you nothing and unblock that work with no agent change.
 
 **Send a `tool_call` before the work, and `tool_call_update` after.** LocalACP
@@ -253,4 +253,4 @@ settable. Keep your defaults working for a client that never touches them.
 | `tool_call` before the work, not just after | ordering | Progress instead of an apparent hang |
 | Accurate `kind` | vocabulary | A visible difference between reading and deleting |
 | Byte-identical prompt echo | do nothing | The prompt appears once |
-| `rawInput` / `rawOutput` on tool calls | pass-through | Nothing yet — unblocks `acpui-n3z` |
+| `rawInput` / `rawOutput` on tool calls | pass-through | Nothing yet — unblocks `localacp-n3z` |
