@@ -88,13 +88,20 @@ jobs:
           jq '.version = "${{ needs.resolve-version.outputs.version }}"' src-tauri/tauri.conf.json > tmp.json
           mv tmp.json src-tauri/tauri.conf.json
 
+      # Cargo.lock is committed (see the note in .gitignore) and tauri's build
+      # precheck compares it against Cargo.toml, so both have to move together
+      # or the build this run is cutting fails on a lockfile mismatch.
+      #
+      # The lockfile is edited as text rather than by `cargo update -p localacp`
+      # because that needs a resolvable dependency graph: `--offline` fails on a
+      # clean runner (no registry cache -- "no matching package named `dirs`"),
+      # and dropping it means a crates.io round-trip for every dependency, all
+      # to rewrite one line whose value is already known. The helper fails loudly
+      # if it cannot find exactly one matching entry.
       - name: Update version in Cargo.toml and Cargo.lock
         run: |
           sed -i '0,/^version = ".*"/s//version = "${{ needs.resolve-version.outputs.version }}"/' src-tauri/Cargo.toml
-          # Cargo.lock is committed and tauri's build precheck compares it
-          # against Cargo.toml, so a bumped manifest with a stale lockfile
-          # fails the build. `--offline` keeps this to the one local package.
-          cargo update --offline --manifest-path src-tauri/Cargo.toml --package localacp
+          python3 scripts/bump-lock-version.py localacp "${{ needs.resolve-version.outputs.version }}" src-tauri/Cargo.lock
 
       - name: Commit and push version changes
         run: |
