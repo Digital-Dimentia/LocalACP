@@ -286,17 +286,45 @@ export function canPickFolder(): boolean {
   return isDesktop();
 }
 
-/** Open the platform folder picker. Returns the absolute path the user
- * selected, or `null` if cancelled / unsupported. */
+/**
+ * Open the platform folder picker. Returns the absolute, canonicalized path
+ * the user selected, or `null` if cancelled / unsupported.
+ *
+ * The dialog is opened in Rust rather than through the dialog plugin here,
+ * because the user driving it is the trust anchor for the fs scope: Rust
+ * records what the user picked as an approved workspace directory, and
+ * nothing the frontend says can add to that set. See `workspace.rs`.
+ */
 export async function pickFolder(title?: string): Promise<string | null> {
   if (!canPickFolder()) return null;
-  const { open } = await import('@tauri-apps/plugin-dialog');
-  const result = await open({
-    directory: true,
-    multiple: false,
+  const { invoke } = await import('@tauri-apps/api/core');
+  const result = await invoke<string | null>('pick_workspace_folder', {
     title: title ?? 'Select Folder',
   });
   return typeof result === 'string' ? result : null;
+}
+
+/**
+ * Grant filesystem access for a session's working directory.
+ *
+ * Rust honours this only when the path resolves inside a directory the user
+ * previously chose through {@link pickFolder}, so a compromised webview
+ * cannot widen its own scope by asking for `/`. Must be called before an
+ * agent starts, since the agent reaches the fs through this app's scope.
+ *
+ * Throws with a user-presentable message when the directory is not approved.
+ */
+export async function activateWorkspace(path: string): Promise<void> {
+  if (!isDesktop()) return;
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('activate_workspace', { path });
+}
+
+/** Directories the user has approved through the native picker. */
+export async function approvedWorkspaces(): Promise<string[]> {
+  if (!isDesktop()) return [];
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<string[]>('approved_workspaces');
 }
 
 // ---------------------------------------------------------------------------

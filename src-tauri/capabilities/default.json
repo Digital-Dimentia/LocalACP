@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window (desktop only). Read/write stay broad because ACP stdio agents legitimately touch any file under the working directory the user picks at runtime, which is not knowable at build time. The deny lists carve out credential stores and write targets that would turn a webview escape into code execution -- deny beats allow in Tauri's fs scope and paths are canonicalized first, so a symlink inside the cwd cannot reach them. See localacp-9va.5.",
+  "description": "Capability for the main window (desktop only). Read/write carry NO build-time allow entries: the only directories an ACP agent may touch are the ones the user picked through the native folder dialog, which Rust records and grants to the runtime fs scope per session (see src/workspace.rs). A path is permitted if either scope allows it, so the runtime grant is what opens the working directory; it used to be a blanket '**' here, which a webview escape could use against any file. The deny lists stay as defence in depth -- deny beats allow in both scopes and paths are canonicalized first, so a symlink inside the working directory cannot reach them. See localacp-9va.5 and localacp-9va.8.",
   "windows": [
     "main"
   ],
@@ -19,11 +19,6 @@
     "opener:allow-reveal-item-in-dir",
     {
       "identifier": "fs:allow-read-text-file",
-      "allow": [
-        {
-          "path": "**"
-        }
-      ],
       "deny": [
         {
           "path": "$HOME/.ssh/**"
@@ -71,11 +66,6 @@
     },
     {
       "identifier": "fs:allow-write-text-file",
-      "allow": [
-        {
-          "path": "**"
-        }
-      ],
       "deny": [
         {
           "path": "$HOME/.ssh/**"

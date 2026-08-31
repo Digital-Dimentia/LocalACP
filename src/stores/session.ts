@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
 import { loadKvStore, type KVStore } from '../lib/host/storage';
-import { getAppVersion } from '../lib/host';
+import { getAppVersion, activateWorkspace } from '../lib/host';
 import { trackEvent, trackError } from '../lib/telemetry';
 import type { SavedSession, ToolCallInfo, PermissionRequest, SessionMode, SlashCommand, ModelInfo, AgentConfig } from '../lib/types';
 import type {
@@ -482,6 +482,19 @@ export const useSessionStore = defineStore('session', () => {
     connectionAborted = false;
     error.value = null;
 
+    // The agent reads and writes through this app's fs scope, so the scope
+    // has to exist before it starts. Rust grants it only for directories the
+    // user picked through the native dialog; anything else is refused here
+    // rather than failing later as an opaque per-file scope denial.
+    try {
+      await activateWorkspace(cwd);
+    } catch (e) {
+      isLoading.value = false;
+      isConnecting.value = false;
+      error.value = e instanceof Error ? e.message : String(e);
+      throw e;
+    }
+
     // Look up the agent's transport kind so we know whether to do the
     // stdio-only startup choreography (spawn → stderr progress) or the
     // streamlined remote path (just open a network transport).
@@ -772,6 +785,12 @@ export const useSessionStore = defineStore('session', () => {
     error.value = null;
 
     try {
+      // A resumed session's cwd comes from frontend-persisted state, which is
+      // attacker-controlled in the very scenario the scoping guards against.
+      // Rust re-checks it against the user-approved set, so resume can only
+      // regain access to directories that were approved through the picker.
+      await activateWorkspace(savedSession.cwd);
+
       const configStore = useConfigStore();
       const agentConfig: AgentConfig | undefined = configStore.getAgent(savedSession.agentName);
       if (!agentConfig) {

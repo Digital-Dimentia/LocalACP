@@ -1,6 +1,7 @@
 mod agent;
 mod config;
 mod logging;
+mod workspace;
 
 use agent::{AgentInstance, AgentManager};
 use config::{
@@ -423,6 +424,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(app_state)
+        .manage(workspace::WorkspaceState::default())
         .setup(|app| {
             let app_handle = app.handle().clone();
             let state: State<AppState> = app.state();
@@ -446,6 +448,15 @@ pub fn run() {
                 }
             }
 
+            // Load the directories the user has previously approved through
+            // the native picker. Nothing is granted to the fs scope here --
+            // scope is granted per session in `activate_workspace`.
+            #[cfg(desktop)]
+            {
+                let workspaces: State<workspace::WorkspaceState> = app.state();
+                workspaces.load(&app_handle);
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -464,7 +475,13 @@ pub fn run() {
             remove_mcp_server,
             get_debug_logging,
             set_debug_logging,
-            get_log_path
+            get_log_path,
+            #[cfg(desktop)]
+            workspace::pick_workspace_folder,
+            #[cfg(desktop)]
+            workspace::activate_workspace,
+            #[cfg(desktop)]
+            workspace::approved_workspaces
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
