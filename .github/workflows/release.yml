@@ -25,31 +25,25 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Update version in all config files (only for workflow_dispatch)
-  update-version:
-    if: github.event_name == 'workflow_dispatch' && !inputs.skip_version_update
+  # Normalise the dispatch input once, in its own job, so every later job reads
+  # one already-validated value and none of them touch `inputs.version` again.
+  #
+  # It has to be a separate job rather than a step inside `update-version`,
+  # because `update-version` is skipped under `skip_version_update` -- and the
+  # re-run path that flag exists for is exactly the one that still needs a
+  # version to check out and tag.
+  #
+  # Why normalise at all: `npm version` silently accepts and strips a leading
+  # `v`, but jq and sed do not. An input of `v0.3.0` wrote a literal
+  # `version = "v0.3.0"` into Cargo.toml -- not valid semver -- and the run only
+  # discovered it during the build, after the version commit and the `v0.3.0`
+  # tag had already been pushed. Failing here costs nothing.
+  resolve-version:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-
-      # Normalise once, here, rather than at each use site. `npm version`
-      # silently accepts and strips a leading `v`, but jq and sed do not: an
-      # input of `v0.3.0` used to write a literal `version = "v0.3.0"` into
-      # Cargo.toml, which is not valid semver and fails the build. Stripping
-      # the prefix and rejecting anything that is still not `x.y.z` means the
-      # run dies here, before it has pushed a commit and a tag.
       - name: Normalise the requested version
         id: version
         run: |
@@ -61,17 +55,42 @@ jobs:
           fi
           echo "version=$version" >> $GITHUB_OUTPUT
 
+  # Update version in all config files (only for workflow_dispatch)
+  update-version:
+    needs: resolve-version
+    if: github.event_name == 'workflow_dispatch' && !inputs.skip_version_update
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ needs.resolve-version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # `npm pkg set` rather than `npm version`: the latter exits non-zero with
+      # "Version not changed" when package.json already holds the target, which
+      # makes re-running a release that failed downstream impossible. Every step
+      # in this job states a desired end state instead of a transition, so the
+      # job is safe to re-run.
       - name: Update version in package.json
-        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
+        run: npm pkg set version="${{ needs.resolve-version.outputs.version }}"
 
       - name: Update version in tauri.conf.json
         run: |
-          jq '.version = "${{ steps.version.outputs.version }}"' src-tauri/tauri.conf.json > tmp.json
+          jq '.version = "${{ needs.resolve-version.outputs.version }}"' src-tauri/tauri.conf.json > tmp.json
           mv tmp.json src-tauri/tauri.conf.json
 
       - name: Update version in Cargo.toml and Cargo.lock
         run: |
-          sed -i '0,/^version = ".*"/s//version = "${{ steps.version.outputs.version }}"/' src-tauri/Cargo.toml
+          sed -i '0,/^version = ".*"/s//version = "${{ needs.resolve-version.outputs.version }}"/' src-tauri/Cargo.toml
           # Cargo.lock is committed and tauri's build precheck compares it
           # against Cargo.toml, so a bumped manifest with a stale lockfile
           # fails the build. `--offline` keeps this to the one local package.
@@ -82,13 +101,33 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
-          git commit -m "chore: release v${{ steps.version.outputs.version }}"
-          git push
+          # Already at the target version -- a re-run, or a release cut from a
+          # branch someone bumped by hand. Nothing to record, and `git commit`
+          # treats that as an error, so say so and carry on to the tag.
+          if git diff --cached --quiet; then
+            echo "Already at v${{ needs.resolve-version.outputs.version }}; no version commit needed."
+          else
+            git commit -m "chore: release v${{ needs.resolve-version.outputs.version }}"
+            git push
+          fi
 
+      # Moving a tag would silently change what an existing release points at,
+      # so refuse instead. Deleting the old tag is a deliberate act and belongs
+      # with the person who decided to re-cut the release.
       - name: Create and push tag
         run: |
-          git tag "v${{ steps.version.outputs.version }}"
-          git push origin "v${{ steps.version.outputs.version }}"
+          tag="v${{ needs.resolve-version.outputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            remote_sha=$(git ls-remote --tags origin "refs/tags/$tag" | cut -f1)
+            if [ "$(git rev-parse HEAD)" = "$(git rev-parse "$remote_sha^{commit}" 2>/dev/null)" ]; then
+              echo "Tag $tag already points at this commit; nothing to do."
+              exit 0
+            fi
+            echo "::error::Tag $tag already exists on origin and points elsewhere. Delete it first: git push origin :refs/tags/$tag"
+            exit 1
+          fi
+          git tag "$tag"
+          git push origin "$tag"
 
   # Get version from tag (for tag push trigger)
   get-version:
@@ -103,8 +142,19 @@ jobs:
 
   # Build for all platforms
   build:
-    needs: [update-version, get-version]
-    if: always() && (needs.update-version.result == 'success' || needs.get-version.result == 'success' || needs.update-version.result == 'skipped')
+    needs: [resolve-version, update-version, get-version]
+    # `always()` is needed because two of the three upstream jobs are skipped on
+    # any given trigger, but it also means an outright failure no longer stops
+    # this job on its own -- a skipped `update-version` looks the same whether
+    # it was skipped by `skip_version_update` or because `resolve-version`
+    # rejected the input. So failures are excluded explicitly, and the run needs
+    # a version from somewhere: `get-version` on a tag push, `resolve-version`
+    # on a dispatch.
+    if: |
+      always()
+      && needs.resolve-version.result != 'failure'
+      && needs.update-version.result != 'failure'
+      && (needs.get-version.result == 'success' || needs.resolve-version.result == 'success')
     permissions:
       contents: write
     strategy:
@@ -132,7 +182,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', needs.resolve-version.outputs.version) || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -164,8 +214,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v${{ needs.update-version.outputs.version || needs.get-version.outputs.version || inputs.version }}
-          releaseName: 'LocalACP v${{ needs.update-version.outputs.version || needs.get-version.outputs.version || inputs.version }}'
+          tagName: v${{ needs.update-version.outputs.version || needs.get-version.outputs.version || needs.resolve-version.outputs.version }}
+          releaseName: 'LocalACP v${{ needs.update-version.outputs.version || needs.get-version.outputs.version || needs.resolve-version.outputs.version }}'
           releaseBody: |
             ## What's New
             
@@ -182,7 +232,7 @@ jobs:
 
   # Publish the release after all builds complete
   publish:
-    needs: [build, update-version, get-version]
+    needs: [build, resolve-version, update-version, get-version]
     if: always() && needs.build.result == 'success'
     runs-on: ubuntu-latest
     permissions:
@@ -196,7 +246,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ needs.update-version.outputs.version || needs.get-version.outputs.version || inputs.version }}"
+          VERSION="${{ needs.update-version.outputs.version || needs.get-version.outputs.version || needs.resolve-version.outputs.version }}"
           if [ -z "$VERSION" ]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
           fi
