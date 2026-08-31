@@ -1,6 +1,6 @@
 [package]
 name = "localacp"
-version = "0.3.1"
+version = "0.3.0"
 description = "LocalACP — a desktop client for ACP agents"
 authors = ["David Buschman"]
 edition = "2021"
