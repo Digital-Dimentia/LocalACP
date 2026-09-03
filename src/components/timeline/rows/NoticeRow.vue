@@ -42,5 +42,8 @@ const icons: Record<NoticeEntry['level'], string> = {
 
 .notice-text {
   overflow-wrap: break-word;
+  /* Close reasons can carry a multi-line stderr tail from a failed agent
+     spawn; without this the lines collapse into one unreadable run. */
+  white-space: pre-wrap;
 }
 </style>

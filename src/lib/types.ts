@@ -194,6 +194,14 @@ export interface AgentStderr {
   line: string;
 }
 
+export interface AgentClosed {
+  agent_id: string;
+  /** Exit status, or null when the agent was killed deliberately by us. */
+  exit_code: number | null;
+  /** Last stderr lines before the exit — the diagnosis for a failed spawn. */
+  stderr_tail: string[];
+}
+
 export interface SavedSession {
   id: string;
   agentName: string;

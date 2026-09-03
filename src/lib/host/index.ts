@@ -16,6 +16,7 @@ import type {
   AgentConfig,
   McpServerConfig,
   AgentInstance,
+  AgentClosed,
   AgentMessage,
   AgentStderr,
   AgentTransportKind,
@@ -237,11 +238,13 @@ export async function onAgentMessage(
 }
 
 export async function onAgentClosed(
-  callback: (agentId: string) => void
+  callback: (closed: AgentClosed) => void
 ): Promise<Unlisten> {
   if (!isTauriHost()) return () => {};
   const { listen } = await import('@tauri-apps/api/event');
-  return listen<string>('agent-closed', (event) => callback(event.payload)) as Promise<Unlisten>;
+  return listen<AgentClosed>('agent-closed', (event) =>
+    callback(event.payload)
+  ) as Promise<Unlisten>;
 }
 
 export async function onAgentStderr(

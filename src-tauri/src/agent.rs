@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 #[cfg(desktop)]
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 #[cfg(desktop)]
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 #[cfg(desktop)]
 use std::io::{BufRead, BufReader, Write};
 #[cfg(desktop)]
@@ -44,9 +44,57 @@ pub struct AgentStderr {
     pub line: String,
 }
 
+/// Payload for the `agent-closed` event.
+///
+/// `stderr_tail` is the last few lines the agent wrote to stderr before it
+/// died. It is carried here — rather than left to the `agent-stderr` stream —
+/// so a spawn failure arrives at the UI with its own diagnosis attached: an
+/// agent that dies during startup often writes the only useful explanation
+/// (a missing binary, a broken package install) and exits immediately.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentClosed {
+    pub agent_id: String,
+    /// Exit status, when the process was reaped by us. `None` when the agent
+    /// was killed deliberately by the client, or the status was unavailable.
+    pub exit_code: Option<i32>,
+    pub stderr_tail: Vec<String>,
+}
+
+/// How many stderr lines to retain for the failure path.
+#[cfg(desktop)]
+const STDERR_TAIL_LINES: usize = 50;
+
+/// Read `stderr` to EOF, retaining the last [`STDERR_TAIL_LINES`] lines in
+/// `tail` and handing every line to `on_line` as it arrives.
+///
+/// Split out from the reader thread so the capture can be tested against a real
+/// subprocess without a Tauri `AppHandle` to emit through.
+#[cfg(desktop)]
+fn drain_stderr<R: std::io::Read>(
+    stderr: R,
+    tail: &Mutex<VecDeque<String>>,
+    mut on_line: impl FnMut(String),
+) {
+    let reader = BufReader::new(stderr);
+    for line in reader.lines() {
+        match line {
+            Ok(line_content) => {
+                {
+                    let mut tail = tail.lock();
+                    if tail.len() == STDERR_TAIL_LINES {
+                        tail.pop_front();
+                    }
+                    tail.push_back(line_content.clone());
+                }
+                on_line(line_content);
+            }
+            Err(_) => break,
+        }
+    }
+}
+
 #[cfg(desktop)]
 struct RunningAgent {
-    #[allow(dead_code)]
     child: Child,
     stdin: Arc<RwLock<std::process::ChildStdin>>,
 }
@@ -225,6 +273,35 @@ impl AgentManager {
 
         let stdin = Arc::new(RwLock::new(stdin));
 
+        // Retains the tail of stderr so the stdout thread can attach it to the
+        // close event if the agent turns out to have died rather than exited
+        // cleanly. Shared with the stderr thread below.
+        let stderr_tail = Arc::new(Mutex::new(VecDeque::<String>::with_capacity(
+            STDERR_TAIL_LINES,
+        )));
+
+        // Spawn a thread to read stderr and emit events (for startup progress).
+        // Started before the stdout thread so its handle can be handed over:
+        // stdout closing does not mean stderr has been drained, and the lines
+        // that matter are the ones written immediately before the exit.
+        let agent_id_clone2 = agent_id.clone();
+        let app_handle_clone2 = app_handle.clone();
+        let stderr_tail_writer = Arc::clone(&stderr_tail);
+        let stderr_thread = thread::spawn(move || {
+            drain_stderr(stderr, &stderr_tail_writer, |line_content| {
+                // Debug level, so this only reaches the file when the user
+                // opted in: agent stderr can echo prompt text and absolute
+                // paths. The failure path below is the sole exception, and
+                // only for an agent that died.
+                log::debug!("[{}] {}", agent_id_clone2, line_content);
+                let stderr_msg = AgentStderr {
+                    agent_id: agent_id_clone2.clone(),
+                    line: line_content,
+                };
+                let _ = app_handle_clone2.emit("agent-stderr", stderr_msg);
+            });
+        });
+
         // Spawn a thread to read stdout and emit events
         let agent_id_clone = agent_id.clone();
         let app_handle_clone = app_handle.clone();
@@ -246,31 +323,47 @@ impl AgentManager {
             }
             // Agent process ended, remove from map
             log::info!("Agent {} closed its stdout; cleaning up", agent_id_clone);
-            agents_clone.write().remove(&agent_id_clone);
-            let _ = app_handle_clone.emit("agent-closed", agent_id_clone);
-        });
 
-        // Spawn a thread to read stderr and emit events (for startup progress)
-        let agent_id_clone2 = agent_id.clone();
-        let app_handle_clone2 = app_handle.clone();
-        thread::spawn(move || {
-            let reader = BufReader::new(stderr);
-            for line in reader.lines() {
-                match line {
-                    Ok(line_content) => {
-                        // Debug level, so this only reaches the file when the
-                        // user opted in: agent stderr can echo prompt text and
-                        // absolute paths.
-                        log::debug!("[{}] {}", agent_id_clone2, line_content);
-                        let stderr_msg = AgentStderr {
-                            agent_id: agent_id_clone2.clone(),
-                            line: line_content,
-                        };
-                        let _ = app_handle_clone2.emit("agent-stderr", stderr_msg);
-                    }
-                    Err(_) => break,
+            // A deliberate `kill_agent` removes the entry itself, so getting
+            // `Some` here means the agent died on its own — the case worth
+            // diagnosing.
+            let unexpected = agents_clone.write().remove(&agent_id_clone);
+
+            // Drain stderr before reading the tail. npm and friends write their
+            // error and exit at once, so without this join the tail races empty
+            // in exactly the situation it exists for.
+            let _ = stderr_thread.join();
+
+            let exit_code = unexpected.and_then(|mut agent| match agent.child.wait() {
+                Ok(status) => status.code(),
+                Err(e) => {
+                    log::warn!("Could not reap agent {}: {}", agent_id_clone, e);
+                    None
                 }
+            });
+
+            let tail: Vec<String> = stderr_tail.lock().iter().cloned().collect();
+
+            // Promote the tail out of Debug only when the agent actually failed.
+            // A clean exit keeps stderr at Debug, per the privacy default above.
+            if exit_code.is_some_and(|c| c != 0) && !tail.is_empty() {
+                log::error!(
+                    "Agent {} exited with code {}; last {} stderr line(s):\n{}",
+                    agent_id_clone,
+                    exit_code.unwrap_or_default(),
+                    tail.len(),
+                    tail.join("\n")
+                );
             }
+
+            let _ = app_handle_clone.emit(
+                "agent-closed",
+                AgentClosed {
+                    agent_id: agent_id_clone,
+                    exit_code,
+                    stderr_tail: tail,
+                },
+            );
         });
 
         let running_agent = RunningAgent { child, stdin };
@@ -388,5 +481,83 @@ mod tests {
             build_spawn_path(None, ""),
             "/opt/homebrew/bin:/usr/local/bin"
         );
+    }
+
+    // --- stderr tail capture -------------------------------------------------
+
+    use super::{drain_stderr, STDERR_TAIL_LINES};
+    use parking_lot::Mutex;
+    use std::collections::VecDeque;
+    use std::process::{Command, Stdio};
+    use std::sync::Arc;
+    use std::thread;
+
+    fn empty_tail() -> Arc<Mutex<VecDeque<String>>> {
+        Arc::new(Mutex::new(VecDeque::new()))
+    }
+
+    fn tail_lines(tail: &Mutex<VecDeque<String>>) -> Vec<String> {
+        tail.lock().iter().cloned().collect()
+    }
+
+    /// The regression this whole change exists for: a process that writes its
+    /// diagnosis to stderr and exits immediately. Reproduces the real spawn
+    /// path — stdout is watched on one thread, stderr on another, and the tail
+    /// is only read after the stderr thread is joined. Without that join the
+    /// tail races empty in exactly this case.
+    #[test]
+    fn stderr_written_immediately_before_exit_survives_the_race() {
+        let mut child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("echo 'npm error code ENOTEMPTY' >&2; exit 3")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn");
+
+        let stdout = child.stdout.take().unwrap();
+        let stderr = child.stderr.take().unwrap();
+
+        let tail = empty_tail();
+        let writer = Arc::clone(&tail);
+        let stderr_thread = thread::spawn(move || drain_stderr(stderr, &writer, |_| {}));
+
+        // Mirror the stdout thread: read to EOF, then join stderr before
+        // reaping and reading the tail.
+        use std::io::Read;
+        let mut sink = String::new();
+        let mut stdout = stdout;
+        let _ = stdout.read_to_string(&mut sink);
+
+        stderr_thread.join().unwrap();
+        let status = child.wait().expect("wait");
+
+        assert_eq!(status.code(), Some(3));
+        assert_eq!(tail_lines(&tail), vec!["npm error code ENOTEMPTY"]);
+    }
+
+    #[test]
+    fn the_tail_keeps_the_last_lines_and_drops_the_oldest() {
+        let tail = empty_tail();
+        let total = STDERR_TAIL_LINES + 10;
+        let input: String = (0..total)
+            .map(|i| format!("line {}\n", i))
+            .collect::<Vec<_>>()
+            .join("");
+
+        drain_stderr(input.as_bytes(), &tail, |_| {});
+
+        let lines = tail_lines(&tail);
+        assert_eq!(lines.len(), STDERR_TAIL_LINES);
+        assert_eq!(lines.first().unwrap(), &format!("line {}", total - STDERR_TAIL_LINES));
+        assert_eq!(lines.last().unwrap(), &format!("line {}", total - 1));
+    }
+
+    #[test]
+    fn every_line_still_reaches_the_emit_callback() {
+        let tail = empty_tail();
+        let mut seen = Vec::new();
+        drain_stderr("one\ntwo\nthree\n".as_bytes(), &tail, |line| seen.push(line));
+        assert_eq!(seen, vec!["one", "two", "three"]);
     }
 }

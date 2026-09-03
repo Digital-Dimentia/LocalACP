@@ -11,8 +11,30 @@ import {
   sendToAgent,
   spawnAgent,
 } from '../host';
-import type { AgentInstance } from '../types';
+import type { AgentClosed, AgentInstance } from '../types';
 import { TransportListeners, type AcpTransport, type Unsubscribe } from './types';
+
+/** Stderr lines to quote in the close reason; the full tail is in the log. */
+const QUOTED_STDERR_LINES = 10;
+
+/**
+ * Build the close reason for an agent that exited on its own.
+ *
+ * An agent that dies during startup usually explains itself on stderr and then
+ * exits — so when we have that tail, it belongs in the error the user sees.
+ * Without it they get "agent process exited" and no way to act on it.
+ */
+export function describeExit(closed: AgentClosed): string {
+  const base =
+    closed.exit_code === null || closed.exit_code === undefined
+      ? 'agent process exited'
+      : `agent process exited with code ${closed.exit_code}`;
+
+  const tail = closed.stderr_tail?.filter((line) => line.trim() !== '') ?? [];
+  if (tail.length === 0) return base;
+
+  return `${base}\n${tail.slice(-QUOTED_STDERR_LINES).join('\n')}`;
+}
 
 export class StdioTransport implements AcpTransport {
   private readonly messageListeners = new TransportListeners<string>();
@@ -39,8 +61,8 @@ export class StdioTransport implements AcpTransport {
       }
     })) as unknown as () => void;
 
-    this.unlistenClosed = (await onAgentClosed((agentId) => {
-      if (agentId === this.agentInstance.id && !this.closed) {
+    this.unlistenClosed = (await onAgentClosed((closed) => {
+      if (closed.agent_id === this.agentInstance.id && !this.closed) {
         this.closed = true;
         // Drop the global Tauri listeners as soon as we know the process is
         // gone. Without this, repeated unexpected exits would leak a
@@ -53,7 +75,7 @@ export class StdioTransport implements AcpTransport {
           this.unlistenClosed();
           this.unlistenClosed = null;
         }
-        this.closeListeners.emit('agent process exited');
+        this.closeListeners.emit(describeExit(closed));
         this.messageListeners.clear();
         this.closeListeners.clear();
       }
