@@ -294,7 +294,7 @@ Mobile OSes freeze backgrounded apps within seconds, dropping the WebSocket. `--
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 18+
+- [Node.js](https://nodejs.org/) 20+
 - [Rust](https://rustup.rs/) 1.70+
 - Platform-specific build tools (see [Tauri Prerequisites](https://tauri.app/start/prerequisites/))
 
