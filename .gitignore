@@ -1,4 +1,4 @@
-# Logs
+# Logs (including logs/smoke/, the browser smoke test's screenshots)
 logs
 *.log
 npm-debug.log*

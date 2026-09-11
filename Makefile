@@ -2,7 +2,7 @@
 # `make` with no target prints this help.
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev dev-web build build-web preview test test-watch \
+.PHONY: help install dev dev-web build build-web preview test test-watch smoke \
         typecheck mock brand brand-check clean
 
 NPM ?= npm
@@ -37,6 +37,9 @@ test: install ## Run the test suite once
 
 test-watch: install ## Run the tests in watch mode
 	$(NPM) run test:watch
+
+smoke: install ## Drive the web build in a real browser (see README)
+	$(NPM) run test:smoke
 
 typecheck: install ## Type-check without emitting
 	$(NPM) run build

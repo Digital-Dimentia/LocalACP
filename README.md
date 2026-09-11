@@ -427,6 +427,40 @@ A full rebrand also means updating `identifier` and the `bundle.icon` list in
 `src-tauri/tauri.conf.json` by hand; those drive the bundle identity and the
 dock/taskbar icon, and are not derived from `branding.json`.
 
+### Tests
+
+```bash
+npm test          # unit + component tests (vitest)
+npm run test:smoke   # browser smoke test (see below)
+```
+
+Or via the Makefile: `make test`, `make smoke`, `make test-watch`.
+
+#### Browser smoke test
+
+`npm test` mounts components in a simulated DOM. The smoke test drives the
+assembled web build in a real browser instead: it starts its own dev server and
+its own copy of `fixtures/mock-acp-agent.mjs` over WebSocket, connects them
+through the UI, plays a whole turn — prompt, tool rows, permission request,
+answer — and asserts on what rendered. Screenshots of each step land in
+`logs/smoke/`. Both child processes are killed on the way out.
+
+It needs Chromium's headless shell, which is not installed by `npm install`:
+
+```bash
+npx playwright install chromium-headless-shell
+```
+
+Set `PLAYWRIGHT_HEADLESS_SHELL` to use a binary from somewhere else. The test
+exits 2 (rather than failing) when no browser is available, so it can be wired
+into CI that may not have one.
+
+Three details of the launch are deliberate and documented in the script: it
+drives **chrome-headless-shell** rather than the full Chromium build, passes
+**`--single-process`** so Chromium never needs to register a Mach bootstrap
+service, and talks to **localhost** rather than 127.0.0.1 because Vite binds
+`[::1]` only. Each one is a hang or a fatal startup error if changed.
+
 ### Test fixtures
 
 `fixtures/` holds standalone mock agents for reproducing behaviour that is hard
